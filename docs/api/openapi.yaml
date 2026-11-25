@@ -1,0 +1,725 @@
+openapi: 3.0.3
+info:
+  title: CivicShield API
+  version: 0.1.0
+  description: |
+    Contract between the CivicShield frontend (React) and backend (Django REST Framework).
+    Derived from the frontend's mock API layer (src/api/client.ts). Freeze this before backend work starts;
+    change it deliberately and update both sides together.
+
+    Conventions
+    - All JSON uses camelCase. Dates are ISO 8601 UTC strings.
+    - Public endpoints need no login. Staff endpoints need `Authorization: Bearer <access token>`.
+    - Every error has the shape `Error`. 400 = invalid input, 401 = not signed in, 403 = role not allowed,
+      404 = not found (or not visible to you), 409 = action not allowed at the report's current step,
+      429 = too many requests.
+servers:
+  - url: http://localhost:8000/api
+tags:
+  - name: Public
+  - name: Auth
+  - name: Staff
+  - name: Dashboard
+  - name: Admin
+
+paths:
+  /public/reports:
+    post:
+      tags: [Public]
+      summary: Submit a report (no account)
+      description: Rate limited per IP. The tracking code is returned ONCE and stored only as a hash.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/NewReport' }
+      responses:
+        '201':
+          description: Report created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportCreated' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /public/reports/track:
+    post:
+      tags: [Public]
+      summary: Track a report with Report ID and tracking code
+      description: |
+        POST (not GET) so the tracking code never appears in URLs or server logs.
+        A wrong ID and a wrong code return the same 404, so IDs cannot be probed. Rate limited per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackRequest' }
+      responses:
+        '200':
+          description: Approved public information only
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicReportView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /public/reports/feedback:
+    post:
+      tags: [Public]
+      summary: Rate a resolved report (once per report)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackRequest' }
+      responses:
+        '204': { description: Feedback saved }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Report is not closed yet, or feedback was already given
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /public/chat:
+    post:
+      tags: [Public]
+      summary: Ask the citizen-support chatbot (Phase 8; optional until then)
+      description: |
+        Answers only from approved FAQ entries. Never receives or returns private report data.
+        The frontend currently answers locally; this endpoint exists for a later server-side or AI-assisted version.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Answer
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatAnswer' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /public/issues:
+    get:
+      tags: [Public]
+      summary: Public list of reported and solved issues
+      description: |
+        Only reports the administration has already reviewed are listed (status under_review, assigned,
+        in_progress, resolution_submitted, returned or closed). Submitted, incomplete and duplicate reports stay private.
+        Includes the citizen's photo and coordinates (the frontend turns them into a map link). Never includes tracking codes,
+        internal notes, organizations or staff names. Citizens are told before they submit that photo and location become public.
+        `stats` always counts every public issue, whatever filters are used.
+      parameters:
+        - { name: group, in: query, schema: { $ref: '#/components/schemas/IssueGroup' } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 12 } }
+      responses:
+        '200':
+          description: Statistics and a page of issues, most recently active first
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicIssues' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Staff sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access, refresh, user]
+                properties:
+                  access: { type: string }
+                  refresh: { type: string }
+                  user: { $ref: '#/components/schemas/StaffUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Get a new access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh]
+              properties:
+                refresh: { type: string }
+      responses:
+        '200':
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access]
+                properties:
+                  access: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current staff user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The signed-in user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /staff/reports:
+    get:
+      tags: [Staff]
+      summary: List reports
+      description: Administrators see all reports. Providers see ONLY reports assigned to their organization (enforced by the server).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/Status' } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: orgId, in: query, description: Administrators only, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200':
+          description: A page of reports, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [count, results]
+                properties:
+                  count: { type: integer }
+                  results:
+                    type: array
+                    items: { $ref: '#/components/schemas/StaffReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /staff/reports/{id}:
+    get:
+      tags: [Staff]
+      summary: Get one report
+      description: 404 if it does not exist or is not visible to this user.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ReportId' }
+      responses:
+        '200':
+          description: The report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /staff/reports/{id}/actions:
+    post:
+      tags: [Staff]
+      summary: Perform a workflow action
+      description: |
+        Allowed role and starting status per action are listed in the table in API_CONTRACT.md.
+        Every successful action appends to the report's history and to the audit log.
+        Submitting a resolution (with evidence file) uses the separate /resolution endpoint.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ReportId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActionRequest' }
+      responses:
+        '200':
+          description: The updated report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffReport' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /staff/reports/{id}/resolution:
+    post:
+      tags: [Staff]
+      summary: Provider submits action taken and evidence
+      description: Provider only. Allowed from in_progress or returned. Moves the report to resolution_submitted.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/ReportId' }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [summary]
+              properties:
+                summary: { type: string, minLength: 10, maxLength: 2000 }
+                evidence: { type: string, format: binary, description: 'JPG, PNG or WebP, up to 5 MB' }
+      responses:
+        '200':
+          description: The updated report
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffReport' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /staff/dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: Aggregate figures (administrators only)
+      description: Computed by database queries. The AI summary may only use these figures.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: days, in: query, description: Only reports submitted in the last N days, schema: { type: integer, minimum: 1 } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: orgId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stats' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /staff/dashboard/map-points:
+    get:
+      tags: [Dashboard]
+      summary: Report locations for the map (administrators only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: orgId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Points
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MapPoint' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/organizations:
+    get:
+      tags: [Admin]
+      summary: List organizations (frontend screen not built yet)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Organization' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin]
+      summary: Create an organization (frontend screen not built yet)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrganizationInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Organization' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List staff accounts (frontend screen not built yet)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Staff users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StaffUser' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin]
+      summary: Create a staff account (frontend screen not built yet)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StaffUserInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffUser' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    ReportId:
+      name: id
+      in: path
+      required: true
+      description: Report ID such as CS-2026-0001
+      schema: { type: string, pattern: '^CS-[0-9]{4}-[0-9]{4,}$' }
+
+  responses:
+    ValidationError:
+      description: Invalid input
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Not signed in or token expired
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Your role cannot do this
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found, or not visible to you
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Not allowed at the report's current step
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: Rate limit reached
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Category:
+      type: string
+      enum: [electricity, water, telecom, infrastructure]
+
+    Status:
+      type: string
+      description: Internal workflow state. Working assumption until requirements are confirmed.
+      enum: [submitted, under_review, incomplete, duplicate, assigned, in_progress, resolution_submitted, returned, closed]
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: invalid_transition }
+        message: { type: string }
+        fields:
+          type: object
+          description: Per-field messages for 400 responses
+          additionalProperties: { type: string }
+
+    NewReport:
+      type: object
+      required: [category, description, area]
+      properties:
+        category: { $ref: '#/components/schemas/Category' }
+        description: { type: string, minLength: 20, maxLength: 2000 }
+        area: { type: string, minLength: 1, maxLength: 200 }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        photo: { type: string, format: binary, description: 'JPG, PNG or WebP, up to 5 MB. Type checked by content, not only extension.' }
+
+    ReportCreated:
+      type: object
+      required: [reportId, trackingCode]
+      properties:
+        reportId: { type: string, example: CS-2026-0001 }
+        trackingCode: { type: string, example: 'K7M2-9QXP', description: 'Shown only once. Never returned again.' }
+
+    TrackRequest:
+      type: object
+      required: [reportId, trackingCode]
+      properties:
+        reportId: { type: string }
+        trackingCode: { type: string }
+
+    FeedbackRequest:
+      type: object
+      required: [reportId, trackingCode, rating]
+      properties:
+        reportId: { type: string }
+        trackingCode: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string, maxLength: 1000 }
+
+    PublicReportView:
+      type: object
+      description: The ONLY report shape a citizen can receive. No notes, no organization, no staff names, no coordinates beyond what the citizen submitted.
+      required: [id, category, description, area, submittedAt, statusLabel, isResolved, timeline, feedbackGiven]
+      properties:
+        id: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        description: { type: string }
+        area: { type: string }
+        submittedAt: { type: string, format: date-time }
+        statusLabel: { type: string, example: Work in progress }
+        isResolved: { type: boolean }
+        timeline:
+          type: array
+          items:
+            type: object
+            required: [label, at]
+            properties:
+              label: { type: string }
+              at: { type: string, format: date-time }
+        resolution:
+          type: string
+          nullable: true
+          description: The approved resolution text. Present only once the report is closed.
+        feedbackGiven: { type: boolean }
+
+    IssueGroup:
+      type: string
+      description: under_review = status under_review. solved = closed. being_fixed = assigned, in_progress, resolution_submitted or returned.
+      enum: [under_review, being_fixed, solved]
+
+    PublicIssue:
+      type: object
+      required: [id, category, description, area, submittedAt, statusLabel, group]
+      properties:
+        id: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        description: { type: string }
+        area: { type: string }
+        submittedAt: { type: string, format: date-time }
+        statusLabel: { type: string }
+        group: { $ref: '#/components/schemas/IssueGroup' }
+        resolvedAt: { type: string, format: date-time, nullable: true }
+        resolution: { type: string, nullable: true, description: 'How it was solved. Only for solved issues.' }
+        photoUrl: { type: string, nullable: true, description: 'Citizen photo. A stable public image URL, not the short-lived staff link. Omitted when the administrator hid it.' }
+        evidencePhotoUrl: { type: string, nullable: true, description: 'Photo of the finished repair. Solved issues only, and omitted when the administrator hid it.' }
+        lat: { type: number, nullable: true, description: Omitted when the administrator hid the location }
+        lng: { type: number, nullable: true, description: Omitted when the administrator hid the location }
+
+    PublicIssues:
+      type: object
+      required: [stats, count, results]
+      properties:
+        stats:
+          type: object
+          required: [reported, underReview, beingFixed, solved]
+          properties:
+            reported: { type: integer }
+            underReview: { type: integer }
+            beingFixed: { type: integer }
+            solved: { type: integer }
+        count: { type: integer, description: Number of issues matching the filters }
+        results:
+          type: array
+          items: { $ref: '#/components/schemas/PublicIssue' }
+
+    ChatAnswer:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+        links:
+          type: array
+          items:
+            type: object
+            required: [label, to]
+            properties:
+              label: { type: string }
+              to: { type: string }
+        source: { type: string, description: Source of the approved FAQ entry }
+
+    StaffUser:
+      type: object
+      required: [id, name, role]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [admin, provider] }
+        orgId: { type: string, nullable: true, description: Required for providers }
+
+    StaffUserInput:
+      type: object
+      required: [name, username, password, role]
+      properties:
+        name: { type: string }
+        username: { type: string }
+        password: { type: string, format: password, minLength: 8 }
+        role: { type: string, enum: [admin, provider] }
+        orgId: { type: string, nullable: true }
+
+    Organization:
+      type: object
+      required: [id, name, category]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+
+    OrganizationInput:
+      type: object
+      required: [name, category]
+      properties:
+        name: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+
+    StaffReport:
+      type: object
+      description: Full staff view. NEVER includes the tracking code or its hash.
+      required: [id, category, description, area, status, history, createdAt]
+      properties:
+        id: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        description: { type: string }
+        area: { type: string }
+        lat: { type: number, nullable: true }
+        lng: { type: number, nullable: true }
+        photoUrl: { type: string, nullable: true, description: Short-lived signed URL }
+        status: { $ref: '#/components/schemas/Status' }
+        history:
+          type: array
+          items:
+            type: object
+            required: [status, at]
+            properties:
+              status: { $ref: '#/components/schemas/Status' }
+              at: { type: string, format: date-time }
+        orgId: { type: string, nullable: true }
+        hidePhoto: { type: boolean, description: 'True when the administrator hid the photo from the public page' }
+        hideLocation: { type: boolean, description: 'True when the administrator hid the location from the public page' }
+        hideEvidence: { type: boolean, description: 'True when the administrator hid the repair photo from the public page' }
+        notes:
+          type: array
+          items:
+            type: object
+            required: [by, text, at]
+            properties:
+              by: { type: string }
+              text: { type: string }
+              at: { type: string, format: date-time }
+        resolution:
+          type: object
+          nullable: true
+          properties:
+            summary: { type: string }
+            evidenceUrl: { type: string, nullable: true, description: Short-lived signed URL }
+            at: { type: string, format: date-time }
+        feedback:
+          type: object
+          nullable: true
+          properties:
+            rating: { type: integer }
+            comment: { type: string, nullable: true }
+            at: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    ActionRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [start_review, mark_incomplete, mark_duplicate, assign, start_work, approve, return, note, set_visibility]
+        orgId: { type: string, description: 'Required when type is assign' }
+        reason: { type: string, description: 'Required when type is return' }
+        text: { type: string, description: 'Required when type is note' }
+        hidePhoto: { type: boolean, description: 'Required when type is set_visibility. Hides the photo from the public issues page.' }
+        hideLocation: { type: boolean, description: 'Required when type is set_visibility. Hides the coordinates from the public issues page.' }
+        hideEvidence: { type: boolean, description: 'Optional with set_visibility. Hides the provider repair photo from the public issues page. Left unchanged when omitted.' }
+
+    MapPoint:
+      type: object
+      required: [id, lat, lng, category, status]
+      properties:
+        id: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        category: { $ref: '#/components/schemas/Category' }
+        status: { $ref: '#/components/schemas/Status' }
+
+    Stats:
+      type: object
+      required: [total, open, overdue, closed, overdueDays, ratingCount, byCategory, byStatus, byOrg, weekly]
+      properties:
+        total: { type: integer }
+        open: { type: integer, description: Not closed and not duplicate }
+        overdue: { type: integer }
+        closed: { type: integer }
+        overdueDays: { type: integer, example: 7, description: Threshold used for overdue }
+        avgFirstReviewHours: { type: number, nullable: true }
+        avgResolutionDays: { type: number, nullable: true }
+        avgRating: { type: number, nullable: true }
+        ratingCount: { type: integer }
+        byCategory:
+          type: object
+          additionalProperties: { type: integer }
+        byStatus:
+          type: object
+          additionalProperties: { type: integer }
+        byOrg:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              assigned: { type: integer }
+              open: { type: integer }
+        weekly:
+          type: array
+          description: Last 8 weeks, oldest first
+          items:
+            type: object
+            required: [weekEnding, count]
+            properties:
+              weekEnding: { type: string, format: date }
+              count: { type: integer }
