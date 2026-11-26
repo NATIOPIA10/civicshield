@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Answer, FAQS, GREETING, answerQuestion } from "../faq";
+import { Icon } from "./icons";
 
 interface Msg { from: "user" | "bot"; text: string; links?: Answer["links"]; source?: string }
 
@@ -22,17 +23,18 @@ export default function ChatWidget() {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="fixed bottom-4 right-4 z-[1000] rounded-full bg-civic px-5 py-3 font-semibold text-white shadow-lg hover:bg-civic-dark">
+      <button onClick={() => setOpen(true)} className="btn btn-primary fixed bottom-4 right-4 z-[1000] rounded-full shadow-lg">
+        <Icon name="chat" className="h-5 w-5" />
         Ask a question
       </button>
     );
   }
 
   return (
-    <section aria-label="Help chat" className="fixed bottom-4 right-4 z-[1000] flex h-[32rem] max-h-[85vh] w-[22rem] max-w-[calc(100vw-2rem)] flex-col rounded-lg border border-line bg-white shadow-xl">
-      <header className="flex items-center justify-between border-b border-line px-4 py-3">
+    <section aria-label="Help chat" className="fixed bottom-4 right-4 z-[1000] flex h-[32rem] max-h-[85vh] w-[22rem] max-w-[calc(100vw-2rem)] flex-col rounded-2xl border border-line bg-white shadow-xl">
+      <header className="flex items-center justify-between rounded-t-2xl bg-civic px-4 py-3 text-white">
         <h2 className="font-semibold">Help</h2>
-        <button onClick={() => setOpen(false)} className="text-sm font-medium text-civic underline">Close</button>
+        <button onClick={() => setOpen(false)} className="text-sm font-medium text-white underline">Close</button>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 py-3" role="log" aria-live="polite">
@@ -40,7 +42,7 @@ export default function ChatWidget() {
           <div key={i} className={`mb-3 flex ${m.from === "user" ? "justify-end" : ""}`}>
             <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${m.from === "user" ? "bg-civic text-white" : "bg-paper"}`}>
               <p>{m.text}</p>
-              {m.links?.map((l) => <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="mt-2 block font-medium text-civic underline">{l.label}</Link>)}
+              {m.links?.map((l) => <Link key={l.to} to={l.to} onClick={() => setOpen(false)} className="link mt-2 block">{l.label}</Link>)}
               {m.source && <p className="mt-2 text-xs text-muted">Source: {m.source}</p>}
             </div>
           </div>
@@ -56,8 +58,8 @@ export default function ChatWidget() {
 
       <form onSubmit={submit} className="flex gap-2 border-t border-line p-3">
         <label htmlFor="chat-input" className="sr-only">Your question</label>
-        <input id="chat-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type your question" className="min-w-0 flex-1 rounded border border-line px-3 py-2 text-sm" />
-        <button className="rounded bg-civic px-4 py-2 text-sm font-semibold text-white hover:bg-civic-dark">Send</button>
+        <input id="chat-input" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type your question" className="input min-w-0 flex-1 py-2 text-sm" />
+        <button className="btn btn-primary btn-sm">Send</button>
       </form>
     </section>
   );

@@ -3,16 +3,45 @@
 @theme {
   --font-sans: "Public Sans", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-  --color-ink: #13232b;
-  --color-muted: #51636d;
-  --color-paper: #f3f5f7;
-  --color-line: #d5dde2;
+  --color-ink: #0f1f26;
+  --color-muted: #4d5f69;
+  --color-paper: #f4f7f8;
+  --color-line: #dbe3e7;
   --color-civic: #0f6b57;
   --color-civic-dark: #0a4d3f;
+  --color-civic-soft: #e7f3ef;
   --color-signal: #9a6412;
+  --color-signal-soft: #fbf1de;
   --color-alert: #b42318;
+  --color-alert-soft: #fdecea;
+  --color-info: #1d4f91;
+  --color-info-soft: #e8f0fb;
 }
 
-body { background: var(--color-paper); color: var(--color-ink); font-family: var(--font-sans); }
-:focus-visible { outline: 2px solid var(--color-civic); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--color-civic) 55%, white); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation: none !important; }
+}
+
+/* Shared building blocks, so every screen looks and behaves the same. */
+@layer components {
+  .btn { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-5 py-2 text-base font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60; }
+  .btn-sm { @apply min-h-9 px-3.5 py-1.5 text-sm; }
+  .btn-lg { @apply min-h-12 px-7 text-lg; }
+  .btn-primary { @apply bg-civic text-white hover:bg-civic-dark; }
+  .btn-secondary { @apply border-2 border-civic bg-white text-civic hover:bg-civic hover:text-white; }
+  .btn-ghost { @apply text-civic hover:bg-civic-soft; }
+  .btn-danger { @apply border-2 border-alert bg-white text-alert hover:bg-alert hover:text-white; }
+  .input { @apply w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-base shadow-sm focus:border-civic; }
+  .card { @apply rounded-xl border border-line bg-white shadow-sm; }
+  .link { @apply font-medium text-civic underline underline-offset-2 hover:text-civic-dark; }
+  .pill { @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold; }
+}

@@ -6,9 +6,9 @@ export default function StaffNav({ session, onSignOut }: { session: StaffSession
   const navigate = useNavigate();
   const signOut = onSignOut ?? (() => { setSession(null); navigate("/staff"); });
   const link = ({ isActive }: { isActive: boolean }) =>
-    `rounded px-3 py-1.5 text-sm font-medium ${isActive ? "bg-civic text-white" : "text-muted hover:text-ink"}`;
+    `inline-flex min-h-10 items-center rounded-lg px-4 text-sm font-semibold transition-colors ${isActive ? "bg-civic text-white" : "text-muted hover:bg-civic-soft hover:text-civic-dark"}`;
   return (
-    <nav aria-label="Staff" className="mb-8 flex flex-wrap items-center gap-1 border-b border-line pb-3">
+    <nav aria-label="Staff" className="card mb-8 flex flex-wrap items-center gap-1 p-2">
       <NavLink to="/staff" end className={link}>Reports</NavLink>
       {session.role === "admin" && (
         <>
@@ -17,9 +17,15 @@ export default function StaffNav({ session, onSignOut }: { session: StaffSession
           <NavLink to="/staff/users" className={link}>Staff accounts</NavLink>
         </>
       )}
-      <span className="ml-auto flex items-center gap-3 text-sm">
-        <span className="text-muted">{session.name}</span>
-        <button onClick={signOut} className="font-medium text-civic underline">Sign out</button>
+      <span className="ml-auto flex items-center gap-3 pr-1">
+        <span className="hidden text-right leading-tight sm:block">
+          <span className="block text-sm font-semibold">{session.name}</span>
+          <span className="block text-xs text-muted">{session.role === "admin" ? "City administrator" : "Service provider"}</span>
+        </span>
+        <span aria-hidden className="grid h-9 w-9 place-items-center rounded-full bg-civic-soft font-bold text-civic-dark">
+          {session.name.trim().charAt(0).toUpperCase()}
+        </span>
+        <button onClick={signOut} className="btn btn-ghost btn-sm">Sign out</button>
       </span>
     </nav>
   );

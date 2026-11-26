@@ -22,7 +22,7 @@ function Recenter({ value }: { value: LatLng | null }) {
 export default function LocationPicker({ value, onChange }: { value: LatLng | null; onChange: (p: LatLng | null) => void }) {
   return (
     <div>
-      <MapContainer center={DILLA} zoom={13} scrollWheelZoom={false} className="h-72 w-full rounded border border-line lg:h-[28rem]" aria-label="Map for choosing the problem location">
+      <MapContainer center={DILLA} zoom={13} scrollWheelZoom={false} className="h-72 w-full rounded-lg border border-line lg:h-[28rem]" aria-label="Map for choosing the problem location">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -35,7 +35,7 @@ export default function LocationPicker({ value, onChange }: { value: LatLng | nu
         <span className="text-muted" aria-live="polite">
           {value ? `Pin set at ${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}` : "Tap the map to place a pin on the exact spot."}
         </span>
-        {value && <button type="button" onClick={() => onChange(null)} className="font-medium text-civic underline">Remove pin</button>}
+        {value && <button type="button" onClick={() => onChange(null)} className="link">Remove pin</button>}
       </div>
     </div>
   );

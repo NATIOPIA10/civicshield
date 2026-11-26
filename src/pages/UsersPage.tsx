@@ -17,7 +17,7 @@ export default function UsersPage() {
   useEffect(load, []);
 
   if (!session || session.role !== "admin") {
-    return <p>This page is for city administrators. <Link className="text-civic underline" to="/staff">Sign in</Link></p>;
+    return <p>This page is for city administrators. <Link className="link" to="/staff">Sign in</Link></p>;
   }
 
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -35,7 +35,7 @@ export default function UsersPage() {
     }
   };
 
-  const field = "mt-1 w-full rounded border border-line bg-white px-3 py-2";
+  const field = "input mt-1";
   const err = (k: string) => (errors[k] ? <p role="alert" className="mt-1 text-sm text-alert">{errors[k]}</p> : null);
 
   return (
@@ -45,7 +45,7 @@ export default function UsersPage() {
       <p className="mt-1 text-sm text-muted">City administrators and service-provider representatives.</p>
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
-        <div className="overflow-x-auto rounded-lg border border-line bg-white">
+        <div className="overflow-x-auto card">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-line bg-paper text-muted">
               <tr>{["Name", "Username", "Role", "Organization"].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr>
@@ -63,7 +63,7 @@ export default function UsersPage() {
           </table>
         </div>
 
-        <form onSubmit={add} noValidate className="rounded-lg border border-line bg-white p-5">
+        <form onSubmit={add} noValidate className="card p-5">
           <h2 className="font-semibold">Add an account</h2>
           <label htmlFor="n" className="mt-4 block text-sm font-medium">Full name</label>
           <input id="n" value={form.name} onChange={(e) => set("name", e.target.value)} className={field} />
@@ -90,7 +90,7 @@ export default function UsersPage() {
             </>
           )}
           {ok && <p className="mt-3 text-sm text-civic" aria-live="polite">{ok}</p>}
-          <button className="mt-4 rounded bg-civic px-5 py-2 font-semibold text-white hover:bg-civic-dark">Create account</button>
+          <button className="mt-4 btn btn-primary">Create account</button>
           <p className="mt-3 text-xs text-muted">In this prototype, accounts and passwords stay in your browser only.</p>
         </form>
       </div>

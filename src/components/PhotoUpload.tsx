@@ -64,14 +64,14 @@ export default function PhotoUpload({ id, label, hint, optional = true, value, o
       />
 
       {value ? (
-        <div className="mt-2 flex items-center gap-4 rounded-lg border border-line bg-white p-3">
+        <div className="mt-2 flex items-center gap-4 card p-3">
           <img src={value.preview} alt="Selected photo preview" className="h-20 w-20 shrink-0 rounded object-cover" />
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{value.name}</p>
             <p className="text-sm text-muted">{formatSize(value.size)}</p>
           </div>
           <div className="flex flex-col items-end gap-1 text-sm">
-            <button type="button" onClick={() => input.current?.click()} className="font-medium text-civic underline">Replace</button>
+            <button type="button" onClick={() => input.current?.click()} className="link">Replace</button>
             <button type="button" onClick={() => { onChange(null); setError(""); }} className="font-medium text-alert underline">Remove</button>
           </div>
         </div>
@@ -88,7 +88,7 @@ export default function PhotoUpload({ id, label, hint, optional = true, value, o
           <svg aria-hidden viewBox="0 0 24 24" className="h-8 w-8 text-civic" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5V18a2 2 0 002 2h14a2 2 0 002-2v-1.5M12 15V4m0 0L8 8m4-4l4 4" />
           </svg>
-          <span className="font-medium">Drag a photo here, or <span className="text-civic underline">choose a file</span></span>
+          <span className="font-medium">Drag a photo here, or <span className="link">choose a file</span></span>
           <span className="max-w-sm text-sm text-muted">{hint}</span>
         </label>
       )}
