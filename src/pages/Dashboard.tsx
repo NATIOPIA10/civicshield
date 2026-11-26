@@ -24,7 +24,7 @@ function Bars({ rows }: { rows: { label: string; value: number }[] }) {
 }
 
 const Panel = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="rounded-lg border border-line bg-white p-5">
+  <section className="card p-5">
     <h2 className="mb-4 font-semibold">{title}</h2>
     {children}
   </section>
@@ -49,10 +49,10 @@ export default function Dashboard() {
   }, [reports, range, cat, org]);
   const stats = useMemo(() => (filtered ? computeStats(filtered) : null), [filtered]);
   const filtering = range !== "all" || cat !== "all" || org !== "all";
-  const sel = "mt-1 rounded border border-line bg-white px-3 py-2 text-sm";
+  const sel = "input mt-1 w-auto text-sm";
 
   if (!session || session.role !== "admin") {
-    return <p>The dashboard is for city administrators. <Link className="text-civic underline" to="/staff">Sign in</Link></p>;
+    return <p>The dashboard is for city administrators. <Link className="link" to="/staff">Sign in</Link></p>;
   }
   if (!reports || !filtered || !stats) return <p className="text-muted">Loading...</p>;
 
@@ -81,7 +81,7 @@ export default function Dashboard() {
       </div>
 
       {reports.length > 0 && (
-        <div className="mt-6 flex flex-wrap items-end gap-4 rounded-lg border border-line bg-white p-4">
+        <div className="mt-6 flex flex-wrap items-end gap-4 card p-4">
           <div>
             <label htmlFor="f-range" className="block text-sm font-medium">Submitted</label>
             <select id="f-range" value={range} onChange={(e) => setRange(e.target.value)} className={sel}>
@@ -106,7 +106,7 @@ export default function Dashboard() {
             </select>
           </div>
           {filtering && (
-            <button onClick={() => { setRange("all"); setCat("all"); setOrg("all"); }} className="pb-2 text-sm font-medium text-civic underline">Clear filters</button>
+            <button onClick={() => { setRange("all"); setCat("all"); setOrg("all"); }} className="link pb-2 text-sm">Clear filters</button>
           )}
           <p className="pb-2 text-sm text-muted" aria-live="polite">Showing {filtered.length} of {reports.length} reports</p>
         </div>
@@ -129,7 +129,7 @@ export default function Dashboard() {
 
           <dl className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {tiles.map((t) => (
-              <div key={t.label} className="rounded-lg border border-line bg-white p-4">
+              <div key={t.label} className="card p-4">
                 <dt className="text-sm text-muted">{t.label}</dt>
                 <dd className="mt-1 text-2xl font-bold">{t.value}</dd>
               </div>

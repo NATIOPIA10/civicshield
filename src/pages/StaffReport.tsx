@@ -44,14 +44,14 @@ export default function StaffReport() {
     setR({ ...res });
   }, [session, id]);
 
-  if (!session) return <p>Please <Link className="text-civic underline" to="/staff">sign in</Link> first.</p>;
+  if (!session) return <p>Please <Link className="link" to="/staff">sign in</Link> first.</p>;
   if (r === undefined) return <p className="text-muted">Loading...</p>;
-  if (r === null) return <p>Report not found, or it is not assigned to your organization. <Link className="text-civic underline" to="/staff">Back to list</Link></p>;
+  if (r === null) return <p>Report not found, or it is not assigned to your organization. <Link className="link" to="/staff">Back to list</Link></p>;
 
   const admin = session.role === "admin";
-  const btn = "rounded border-2 border-civic px-4 py-2 font-semibold text-civic hover:bg-civic hover:text-white";
-  const solid = "rounded bg-civic px-4 py-2 font-semibold text-white hover:bg-civic-dark";
-  const box = "mt-1 w-full rounded border border-line bg-white px-3 py-2";
+  const btn = "btn btn-secondary";
+  const solid = "btn btn-primary";
+  const box = "input mt-1";
   // Tell the person why there is no button for them yet, instead of leaving the panel looking empty.
   const org = orgName(r.orgId) ?? "the service provider";
   const waiting: Partial<Record<Status, string>> = admin
@@ -68,7 +68,7 @@ export default function StaffReport() {
     <StaffNav session={session} />
     <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
       <section>
-        <Link to="/staff" className="text-sm font-medium text-civic underline">Back to list</Link>
+        <Link to="/staff" className="link text-sm">Back to list</Link>
         <p className="mt-4 font-mono text-sm text-muted">{r.id}</p>
         <h1 className="text-3xl font-bold tracking-tight">{STATUS_LABEL[r.status]}</h1>
         <p className="mt-1 text-sm text-muted">
@@ -90,10 +90,10 @@ export default function StaffReport() {
             <div className="mt-2">
               <SpotMap lat={r.lat} lng={r.lng} label={`Map showing where ${r.id} was reported`} />
               <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-                <a href={mapLink(r.lat, r.lng)} target="_blank" rel="noopener noreferrer" className="font-medium text-civic underline">
+                <a href={mapLink(r.lat, r.lng)} target="_blank" rel="noopener noreferrer" className="link">
                   Open in OpenStreetMap<span className="sr-only"> (opens in a new tab)</span>
                 </a>
-                <a href={directionsLink(r.lat, r.lng)} target="_blank" rel="noopener noreferrer" className="font-medium text-civic underline">
+                <a href={directionsLink(r.lat, r.lng)} target="_blank" rel="noopener noreferrer" className="link">
                   Get directions<span className="sr-only"> (opens in a new tab)</span>
                 </a>
                 <span className="font-mono text-muted">{r.lat.toFixed(5)}, {r.lng.toFixed(5)}</span>
@@ -107,7 +107,7 @@ export default function StaffReport() {
         <p className="mt-4 text-sm">Assigned to: {orgName(r.orgId) ?? "Not assigned"}</p>
 
         {r.resolution && (
-          <div className="mt-6 rounded-lg border border-line bg-white p-4">
+          <div className="mt-6 card p-4">
             <h2 className="font-semibold">Resolution from provider</h2>
             <p className="mt-1">{r.resolution.summary}</p>
             {r.resolution.evidenceData ? (
@@ -133,12 +133,12 @@ export default function StaffReport() {
         <ul className="mt-2 grid gap-2">
           {(r.notes ?? []).length === 0 && <li className="text-sm text-muted">No notes yet.</li>}
           {(r.notes ?? []).map((n, i) => (
-            <li key={i} className="rounded border border-line bg-white p-3 text-sm"><p>{n.text}</p><p className="mt-1 text-muted">{n.by}, {new Date(n.at).toLocaleString()}</p></li>
+            <li key={i} className="rounded-lg border border-line bg-white p-3 text-sm"><p>{n.text}</p><p className="mt-1 text-muted">{n.by}, {new Date(n.at).toLocaleString()}</p></li>
           ))}
         </ul>
       </section>
 
-      <aside className="h-fit rounded-lg border border-line bg-white p-6">
+      <aside className="h-fit card p-6">
         <h2 className="text-lg font-semibold">Actions</h2>
         {msg && <p role="alert" className="mt-2 text-sm text-alert">{msg}</p>}
         <div className="mt-4 grid gap-4">
@@ -202,7 +202,7 @@ export default function StaffReport() {
                 <img
                   src={r.photoData}
                   alt="Thumbnail of the citizen photo"
-                  className={`mt-3 h-24 w-24 rounded border border-line object-cover ${hidePhoto ? "opacity-40" : ""}`}
+                  className={`mt-3 h-24 w-24 rounded-lg border border-line object-cover ${hidePhoto ? "opacity-40" : ""}`}
                 />
               )}
               {(r.photoName || r.photoData) && (

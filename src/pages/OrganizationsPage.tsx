@@ -22,7 +22,7 @@ export default function OrganizationsPage() {
   useEffect(refresh, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!session || session.role !== "admin") {
-    return <p>This page is for city administrators. <Link className="text-civic underline" to="/staff">Sign in</Link></p>;
+    return <p>This page is for city administrators. <Link className="link" to="/staff">Sign in</Link></p>;
   }
 
   const add = async (e: FormEvent) => {
@@ -37,7 +37,7 @@ export default function OrganizationsPage() {
     refresh();
   };
 
-  const field = "mt-1 w-full rounded border border-line bg-white px-3 py-2";
+  const field = "input mt-1";
   return (
     <div>
       <StaffNav session={session} />
@@ -45,7 +45,7 @@ export default function OrganizationsPage() {
       <p className="mt-1 text-sm text-muted">Institutions that receive and resolve reports.</p>
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
-        <div className="overflow-x-auto rounded-lg border border-line bg-white">
+        <div className="overflow-x-auto card">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-line bg-paper text-muted">
               <tr>{["Name", "Handles", "Staff accounts", "Reports assigned"].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr>
@@ -64,7 +64,7 @@ export default function OrganizationsPage() {
           </table>
         </div>
 
-        <form onSubmit={add} className="rounded-lg border border-line bg-white p-5">
+        <form onSubmit={add} className="card p-5">
           <h2 className="font-semibold">Add an organization</h2>
           <label htmlFor="oname" className="mt-4 block text-sm font-medium">Name</label>
           <input id="oname" value={name} onChange={(e) => setName(e.target.value)} className={field} />
@@ -74,7 +74,7 @@ export default function OrganizationsPage() {
           </select>
           {msg && <p role="alert" className="mt-3 text-sm text-alert">{msg}</p>}
           {ok && <p className="mt-3 text-sm text-civic" aria-live="polite">{ok}</p>}
-          <button className="mt-4 rounded bg-civic px-5 py-2 font-semibold text-white hover:bg-civic-dark">Add organization</button>
+          <button className="mt-4 btn btn-primary">Add organization</button>
         </form>
       </div>
     </div>
