@@ -14,6 +14,6 @@ those functions with real `fetch` calls that follow the API contract; screens do
 
     npm test
 
-Runs 37 automated checks: citizen reporting and tracking, the whole staff workflow (assign, work, evidence,
+Runs 55 automated checks: citizen reporting and tracking, the whole staff workflow (assign, work, evidence,
 approve, feedback), provider access limits, organization and account management, photo upload, the public issues page, dashboard figures, the
 summary, and the chatbot. Run it after every change. The map itself is not covered (it needs a real browser).

@@ -4,7 +4,6 @@ import { devSeedDemoReports, getSession, listAllReportsForDashboard } from "../a
 import { OVERDUE_DAYS, computeStats } from "../analytics";
 import ReportMap from "../components/ReportMap";
 import { summarize } from "../summary";
-import StaffNav from "../components/StaffNav";
 import { CATEGORIES, CategoryId, Report, STATUS_LABEL, Status } from "../types";
 import { useOrganizations } from "../useOrganizations";
 
@@ -57,18 +56,17 @@ export default function Dashboard() {
   if (!reports || !filtered || !stats) return <p className="text-muted">Loading...</p>;
 
   const tiles = [
-    { label: "Total reports", value: String(stats.total) },
-    { label: "Open reports", value: String(stats.open) },
-    { label: `Overdue (open over ${OVERDUE_DAYS} days)`, value: String(stats.overdue) },
-    { label: "Closed reports", value: String(stats.closed) },
-    { label: "Average time to first review", value: fmt(stats.avgFirstReviewHours, "hours") },
-    { label: "Average time to resolution", value: fmt(stats.avgResolutionDays, "days") },
-    { label: `Citizen satisfaction (${stats.ratingCount} ratings)`, value: stats.avgRating === null ? "No ratings yet" : `${stats.avgRating.toFixed(1)} out of 5` },
+    { label: "Total reports", value: String(stats.total), hint: "Everything in this view" },
+    { label: "Open reports", value: String(stats.open), hint: "Not yet closed" },
+    { label: `Overdue (open over ${OVERDUE_DAYS} days)`, value: String(stats.overdue), hint: "Open too long. Follow these up" },
+    { label: "Closed reports", value: String(stats.closed), hint: "Solved and checked" },
+    { label: "Average time to first review", value: fmt(stats.avgFirstReviewHours, "hours"), hint: "From sent to reviewed" },
+    { label: "Average time to resolution", value: fmt(stats.avgResolutionDays, "days"), hint: "From sent to closed" },
+    { label: `Citizen satisfaction (${stats.ratingCount} ratings)`, value: stats.avgRating === null ? "No ratings yet" : `${stats.avgRating.toFixed(1)} out of 5`, hint: "Ratings from citizens" },
   ];
 
   return (
     <div>
-      <StaffNav session={session} />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
@@ -132,6 +130,7 @@ export default function Dashboard() {
               <div key={t.label} className="card p-4">
                 <dt className="text-sm text-muted">{t.label}</dt>
                 <dd className="mt-1 text-2xl font-bold">{t.value}</dd>
+                <dd className="mt-1 text-xs text-muted">{t.hint}</dd>
               </div>
             ))}
           </dl>

@@ -1,79 +1,76 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getSession, listStaffReports, setSession, staffLogin } from "../api/client";
+import { getSession, listStaffReports } from "../api/client";
 import ReportMap from "../components/ReportMap";
-import StaffNav from "../components/StaffNav";
 import { PageHeader, StatusPill } from "../components/ui";
-import { CATEGORIES, Report, STATUS_LABEL, StaffSession, Status } from "../types";
+import { CATEGORIES, Report, Status } from "../types";
+import { usePageTitle } from "../usePageTitle";
 import { useOrganizations } from "../useOrganizations";
 
-function Login({ onLogin }: { onLogin: (s: StaffSession) => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+interface Filter { key: string; label: string; hint: string; statuses: Status[] | null; attention?: boolean }
 
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    const s = await staffLogin(username, password);
-    setBusy(false);
-    if (s) onLogin(s);
-    else setError("Wrong username or password.");
-  };
+/** Cards that answer "what needs me right now?" for each role. */
+const ADMIN_FILTERS: Filter[] = [
+  { key: "all", label: "All reports", hint: "Everything", statuses: null },
+  { key: "new", label: "To review", hint: "New, not yet looked at", statuses: ["submitted"], attention: true },
+  { key: "assign", label: "Ready to assign", hint: "Reviewed, needs an organization", statuses: ["under_review"], attention: true },
+  { key: "approve", label: "Awaiting approval", hint: "Provider finished. Check the evidence", statuses: ["resolution_submitted"], attention: true },
+  { key: "closed", label: "Closed", hint: "Solved or ended", statuses: ["closed", "incomplete", "duplicate"] },
+];
+const PROVIDER_FILTERS: Filter[] = [
+  { key: "all", label: "All assigned", hint: "Everything given to you", statuses: null },
+  { key: "start", label: "To start", hint: "Assigned, work not started", statuses: ["assigned"], attention: true },
+  { key: "doing", label: "In progress", hint: "Being worked on, or sent back", statuses: ["in_progress", "returned"], attention: true },
+  { key: "wait", label: "Waiting for approval", hint: "You submitted the result", statuses: ["resolution_submitted"] },
+  { key: "closed", label: "Closed", hint: "Finished", statuses: ["closed"] },
+];
 
-  const field = "input mt-1";
-  return (
-    <form onSubmit={submit} className="card mx-auto max-w-md p-8">
-      <h1 className="text-3xl font-bold tracking-tight">Staff sign in</h1>
-      <p className="mt-2 text-sm text-muted">For city administrators and service-provider representatives.</p>
-      <div className="mt-6">
-        <label htmlFor="u" className="font-semibold">Username</label>
-        <input id="u" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" className={field} />
-      </div>
-      <div className="mt-4">
-        <label htmlFor="p" className="font-semibold">Password</label>
-        <input id="p" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className={field} />
-      </div>
-      {error && <p role="alert" className="mt-3 text-sm text-alert">{error}</p>}
-      <button disabled={busy || !username || !password} className="mt-6 btn btn-primary">
-        {busy ? "Signing in..." : "Sign in"}
-      </button>
-      {import.meta.env.DEV && (
-        <p className="mt-8 rounded bg-white p-3 text-xs text-muted">
-          Development accounts: <span className="font-mono">admin / admin12345</span>, or{" "}
-          <span className="font-mono">provider_water / provider12345</span> (also provider_electric, provider_telecom, provider_roads).
-        </p>
-      )}
-    </form>
-  );
-}
-
-function Queue({ session, onLogout }: { session: StaffSession; onLogout: () => void }) {
+export default function StaffReports() {
+  usePageTitle("Reports");
+  const [session] = useState(getSession);
   const [reports, setReports] = useState<Report[] | null>(null);
-  const [filter, setFilter] = useState<Status | "all">("all");
+  const [filterKey, setFilterKey] = useState("all");
   const [view, setView] = useState<"list" | "map">("list");
   const { orgName } = useOrganizations();
-  useEffect(() => { listStaffReports(session).then(setReports); }, [session]);
+  useEffect(() => { if (session) listStaffReports(session).then(setReports); }, [session]);
 
-  const counts = (reports ?? []).reduce<Record<string, number>>((m, r) => ({ ...m, [r.status]: (m[r.status] ?? 0) + 1 }), {});
-  const rows = (reports ?? []).filter((r) => filter === "all" || r.status === filter);
-  const chip = (active: boolean) => `rounded-lg border px-3.5 py-2 text-sm font-semibold transition-colors ${active ? "border-civic bg-civic text-white" : "border-line bg-white text-muted hover:border-civic hover:text-civic-dark"}`;
+  if (!session) return null;
+  const admin = session.role === "admin";
+  const filters = admin ? ADMIN_FILTERS : PROVIDER_FILTERS;
+  const active = filters.find((f) => f.key === filterKey) ?? filters[0];
+  const countOf = (f: Filter) => (reports ?? []).filter((r) => !f.statuses || f.statuses.includes(r.status)).length;
+  const rows = (reports ?? []).filter((r) => !active.statuses || active.statuses.includes(r.status));
 
   return (
     <div>
-      <StaffNav session={session} onSignOut={onLogout} />
-      <PageHeader title={session.role === "admin" ? "All reports" : "Reports assigned to you"} subtitle={reports ? `${reports.length} ${reports.length === 1 ? "report" : "reports"}` : undefined} />
+      <PageHeader
+        title={admin ? "All reports" : "Reports assigned to you"}
+        subtitle={admin
+          ? "Review new reports, assign them to an organization, and close them once the evidence is checked."
+          : "Reports given to your organization. Start the work, then submit what you did with a photo."}
+      />
 
-      <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Filter by status">
-        <button onClick={() => setFilter("all")} className={chip(filter === "all")}>All ({reports?.length ?? 0})</button>
-        {(Object.keys(counts) as Status[]).map((s) => (
-          <button key={s} onClick={() => setFilter(s)} className={chip(filter === s)}>{STATUS_LABEL[s]} ({counts[s]})</button>
-        ))}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" role="group" aria-label="Show reports">
+        {filters.map((f) => {
+          const n = reports === null ? null : countOf(f);
+          const selected = f.key === active.key;
+          return (
+            <button
+              key={f.key}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => setFilterKey(f.key)}
+              className={`card border-t-4 p-4 text-left transition-shadow hover:shadow-md ${selected ? "border-civic bg-civic-soft" : f.attention && (n ?? 0) > 0 ? "border-t-signal" : "border-t-transparent"}`}
+            >
+              <span className="block text-sm font-semibold text-muted">{f.label}</span>
+              <span className="mt-1 block text-3xl font-bold tracking-tight">{n ?? "–"}</span>
+              <span className="mt-1 block text-xs text-muted">{f.hint}</span>
+            </button>
+          );
+        })}
       </div>
 
-      <div className="mt-4 inline-flex rounded-lg border border-line bg-white p-0.5" role="group" aria-label="Show reports as">
+      <div className="mt-6 inline-flex rounded-lg border border-line bg-white p-0.5" role="group" aria-label="Show reports as">
         {(["list", "map"] as const).map((v) => (
           <button key={v} aria-pressed={view === v} onClick={() => setView(v)} className={`rounded-md px-4 py-1.5 text-sm font-semibold ${view === v ? "bg-civic text-white" : "text-muted hover:text-ink"}`}>
             {v === "list" ? "List" : "Map"}
@@ -83,14 +80,14 @@ function Queue({ session, onLogout }: { session: StaffSession; onLogout: () => v
 
       {view === "map" && <div className="mt-4"><ReportMap reports={rows} /></div>}
 
-      <div className={`mt-6 overflow-x-auto card ${view === "map" ? "hidden" : ""}`}>
+      <div className={`card mt-4 overflow-x-auto ${view === "map" ? "hidden" : ""}`}>
         <table className="w-full text-left text-sm">
           <thead className="border-b border-line bg-paper text-muted">
-            <tr>{["Report ID", "Category", "Area", "Status", "Assigned to", "Submitted"].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr>
+            <tr>{["Report ID", "Category", "Area", "Status", "Assigned to", "Submitted"].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
           </thead>
           <tbody>
             {reports === null && <tr><td colSpan={6} className="px-4 py-6 text-muted">Loading...</td></tr>}
-            {reports && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-6 text-muted">No reports here yet.</td></tr>}
+            {reports && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No reports here yet.</td></tr>}
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-line last:border-0 hover:bg-paper">
                 <td className="px-4 py-3 font-mono"><Link className="link" to={`/staff/report/${r.id}`}>{r.id}</Link></td>
@@ -106,10 +103,4 @@ function Queue({ session, onLogout }: { session: StaffSession; onLogout: () => v
       </div>
     </div>
   );
-}
-
-export default function StaffArea() {
-  const [session, setS] = useState<StaffSession | null>(getSession());
-  if (!session) return <Login onLogin={(s) => { setSession(s); setS(s); }} />;
-  return <Queue session={session} onLogout={() => { setSession(null); setS(null); }} />;
 }

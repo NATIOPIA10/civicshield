@@ -523,6 +523,7 @@ components:
           type: string
           nullable: true
           description: The approved resolution text. Present only once the report is closed.
+        categoryChanged: { type: boolean, description: 'True while the category differs from what the reporter chose. The frontend shows Updated by the city administration. The reason is never included.' }
         feedbackGiven: { type: boolean }
 
     IssueGroup:
@@ -621,6 +622,7 @@ components:
       properties:
         id: { type: string }
         category: { $ref: '#/components/schemas/Category' }
+        originalCategory: { allOf: [{ $ref: '#/components/schemas/Category' }], description: 'What the reporter chose. Never changes, even if the administrator corrects the category.' }
         description: { type: string }
         area: { type: string }
         lat: { type: number, nullable: true }
@@ -670,9 +672,10 @@ components:
       properties:
         type:
           type: string
-          enum: [start_review, mark_incomplete, mark_duplicate, assign, start_work, approve, return, note, set_visibility]
-        orgId: { type: string, description: 'Required when type is assign' }
-        reason: { type: string, description: 'Required when type is return' }
+          enum: [start_review, mark_incomplete, mark_duplicate, assign, start_work, approve, return, note, set_visibility, change_category, reassign]
+        orgId: { type: string, description: 'Required when type is assign or reassign' }
+        category: { allOf: [{ $ref: '#/components/schemas/Category' }], description: 'Required when type is change_category' }
+        reason: { type: string, description: 'Required when type is return, and when type is change_category (at least 5 characters, saved in the internal notes and never shown to the citizen)' }
         text: { type: string, description: 'Required when type is note' }
         hidePhoto: { type: boolean, description: 'Required when type is set_visibility. Hides the photo from the public issues page.' }
         hideLocation: { type: boolean, description: 'Required when type is set_visibility. Hides the coordinates from the public issues page.' }
