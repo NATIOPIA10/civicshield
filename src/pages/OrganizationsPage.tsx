@@ -1,7 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createOrganization, getSession, listAllReportsForDashboard, listStaffUsers } from "../api/client";
-import StaffNav from "../components/StaffNav";
 import { CATEGORIES, CategoryId, Report, StaffUser } from "../types";
 import { useOrganizations } from "../useOrganizations";
 
@@ -40,7 +39,6 @@ export default function OrganizationsPage() {
   const field = "input mt-1";
   return (
     <div>
-      <StaffNav session={session} />
       <h1 className="text-3xl font-bold tracking-tight">Organizations</h1>
       <p className="mt-1 text-sm text-muted">Institutions that receive and resolve reports.</p>
 

@@ -31,6 +31,8 @@ All screens call functions in `src/api/client.ts`. Today they use a mock. To go 
 | `mark_incomplete` | admin | under_review | incomplete |
 | `mark_duplicate` | admin | under_review | duplicate |
 | `assign` (needs `orgId`) | admin | under_review | assigned |
+| `reassign` (needs `orgId`) | admin | assigned, in_progress, returned | assigned. Must be a different organization. Records a note |
+| `change_category` (needs `category` and `reason`) | admin | any step before closed | unchanged. Must be a different category, with a reason of at least 5 characters. Records a note |
 | `start_work` | provider | assigned | in_progress |
 | resolution endpoint | provider | in_progress, returned | resolution_submitted |
 | `approve` | admin | resolution_submitted | closed |
@@ -55,6 +57,7 @@ These cannot be left to the frontend. Write a test for each one.
 9. **Feedback.** Only on a closed report, once per report.
 10. **Secrets.** Keys and database credentials come from environment variables, never from the repository.
 11. **Public issues.** `GET /public/issues` lists only reviewed reports (not submitted, incomplete or duplicate ones) and uses its own allow-list serializer. It returns the citizen's photo and coordinates, and for solved issues the provider's repair photo, (shown as a "View location on map" link) but never tracking codes, internal notes, organizations or staff names. The report form tells citizens that photo and location become public after review.
+13. **Reporter's category.** Store `originalCategory` when the report is created and never overwrite it. Restoring it is an ordinary `change_category` back to that value. Citizens only see `categoryChanged`, never the reason.
 12. **Approved resolution.** The resolution text is public (on the tracking page and the public list) only after the administrator has approved and closed the report.
 
 ## 3b. Changes from the mock (the frontend must adapt)

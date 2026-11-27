@@ -482,3 +482,266 @@ describe("public issues", () => {
     expect(await screen.findByText("No issues have been published yet.")).toBeInTheDocument();
   });
 });
+
+describe("layout and guidance", () => {
+  const admin = { role: "admin" as const, name: "Admin" };
+
+  it("gives the public site a header with a clear Report an issue button and a skip link", () => {
+    open("/");
+    const header = screen.getByRole("banner");
+    expect(within(header).getByRole("link", { name: "Report an issue" })).toBeInTheDocument();
+    expect(within(header).getByRole("link", { name: "Public issues" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Skip to main content" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What would you like to do?" })).toBeInTheDocument();
+  });
+
+  it("opens and closes the public menu on small screens", async () => {
+    const user = userEvent.setup();
+    open("/");
+    expect(screen.queryByRole("navigation", { name: "Main mobile" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    const menu = screen.getByRole("navigation", { name: "Main mobile" });
+    expect(within(menu).getByRole("link", { name: "Track a report" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close menu" }));
+    expect(screen.queryByRole("navigation", { name: "Main mobile" })).not.toBeInTheDocument();
+  });
+
+  it("shows staff a full-screen sign-in without the public header", async () => {
+    open("/staff");
+    expect(await screen.findByLabelText("Username")).toBeInTheDocument();
+    expect(screen.queryByRole("banner")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to the public website" })).toBeInTheDocument();
+  });
+
+  it("gives an administrator a sidebar and a top bar", async () => {
+    const user = userEvent.setup();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    const sidebar = await screen.findByRole("navigation", { name: "Staff" });
+    for (const name of ["Reports", "Dashboard", "Organizations", "Staff accounts"]) {
+      expect(within(sidebar).getByRole("link", { name })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("link", { name: "Public website" })).toBeInTheDocument();
+    const top = screen.getByRole("banner");
+    expect(within(top).getByText("City administrator")).toBeInTheDocument();
+    expect(within(top).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  });
+
+  it("gives a provider only the Reports item", async () => {
+    const user = userEvent.setup();
+    open("/staff");
+    await signIn(user, "provider_water", "provider12345");
+    const sidebar = await screen.findByRole("navigation", { name: "Staff" });
+    expect(within(sidebar).getAllByRole("link").map((l) => l.textContent)).toEqual(["Reports"]);
+    expect(within(screen.getByRole("banner")).getByText("Service provider")).toBeInTheDocument();
+  });
+
+  it("opens the staff menu on small screens", async () => {
+    const user = userEvent.setup();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("button", { name: "Open menu" }));
+    await user.click(screen.getByRole("button", { name: "Close menu" }));
+    expect(screen.queryByRole("button", { name: "Close menu" })).not.toBeInTheDocument();
+  });
+
+  it("shows to-do cards with counts, and filters the list when one is chosen", async () => {
+    const user = userEvent.setup();
+    await newReport(); // submitted, so it needs review
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    const group = await screen.findByRole("group", { name: "Show reports" });
+    const toReview = within(group).getByRole("button", { name: /^To review/ });
+    expect(toReview).toHaveTextContent("–"); // shown until the reports have loaded
+    await waitFor(() => expect(toReview).toHaveTextContent("1"));
+    expect(within(group).getByRole("button", { name: /^All reports/ })).toHaveTextContent("2"); // plus the demo report
+    await user.click(toReview);
+    expect(toReview).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("link", { name: "CS-2026-0001" })).not.toBeInTheDocument();
+    await user.click(within(group).getByRole("button", { name: /^Awaiting approval/ }));
+    expect(screen.getByText("No reports here yet.")).toBeInTheDocument();
+  });
+
+  it("tells the administrator what to do next, step by step", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    expect(await screen.findByText("Next: review this report")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start review" }));
+    expect(await screen.findByText("Next: decide what to do")).toBeInTheDocument();
+  });
+
+  it("tells the provider what to do next", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport();
+    await staffAction(admin, reportId, { type: "start_review" });
+    await staffAction(admin, reportId, { type: "assign", orgId: "electric" });
+    open("/staff");
+    await signIn(user, "provider_electric", "provider12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    expect(await screen.findByText("Next: start work")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start work" }));
+    expect(await screen.findByText("Next: finish and report")).toBeInTheDocument();
+  });
+
+  it("shows the progress steps on the tracking page", async () => {
+    const user = userEvent.setup();
+    const { reportId, trackingCode } = await newReport();
+    await staffAction(admin, reportId, { type: "start_review" });
+    open(`/track?id=${reportId}`);
+    await user.type(screen.getByLabelText("Tracking code"), trackingCode);
+    await user.click(screen.getByRole("button", { name: "Show progress" }));
+    const steps = await screen.findByRole("list", { name: "Progress" });
+    expect(within(steps).getByText(/Received/)).toHaveTextContent("(completed)");
+    expect(within(steps).getByText(/Under review/)).toHaveTextContent("(current step)");
+    expect(within(steps).getByText(/Resolved/)).toHaveTextContent("(not reached yet)");
+  });
+});
+
+describe("category and reassignment", () => {
+  const admin = { role: "admin" as const, name: "Admin" };
+  const water = { role: "provider" as const, orgId: "water", name: "Water" };
+  const electric = { role: "provider" as const, orgId: "electric", name: "Electric" };
+
+  const inProgress = async () => {
+    const r = await newReport("electricity");
+    await staffAction(admin, r.reportId, { type: "start_review" });
+    await staffAction(admin, r.reportId, { type: "assign", orgId: "electric" });
+    await staffAction(electric, r.reportId, { type: "start_work" });
+    return r;
+  };
+
+  it("lets the administrator correct the category with a reason, and records it", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport("electricity");
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    await user.selectOptions(await screen.findByLabelText("Category"), "water");
+
+    // a reason is needed
+    await user.click(screen.getByRole("button", { name: "Save category" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Give a short reason for the change");
+
+    await user.type(screen.getByLabelText("Why is the category changing?"), "Pipe burst, not electrical");
+    await user.click(screen.getByRole("button", { name: "Save category" }));
+    expect(await screen.findByText("Category changed from Electricity to Water supply. Reason: Pipe burst, not electrical.")).toBeInTheDocument();
+    expect(screen.getByText(/Water supply - (School|Market) road/)).toBeInTheDocument();
+    expect(screen.getByText("Reporter chose Electricity")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save category" })).toBeDisabled(); // nothing left to save
+  });
+
+  it("keeps the reporter's choice visible and lets the administrator restore it", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport("electricity");
+    await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "First guess" });
+    await staffAction(admin, reportId, { type: "change_category", category: "telecom", reason: "Second guess" });
+
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    expect(await screen.findByText("Reporter chose Electricity")).toBeInTheDocument(); // still the first choice, not the previous one
+    await user.click(screen.getByRole("button", { name: "Restore the reporter's choice" }));
+    expect(await screen.findByText("Category changed from Network and telecommunications to Electricity. Reason: Restored the category chosen by the reporter.")).toBeInTheDocument();
+    expect(screen.queryByText(/Reporter chose/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore the reporter's choice" })).not.toBeInTheDocument();
+  });
+
+  it("tells the citizen when the category was updated, and only then", async () => {
+    const user = userEvent.setup();
+    const { reportId, trackingCode } = await newReport("electricity");
+    const lookup = async () => {
+      const view = open(`/track?id=${reportId}`);
+      await user.type(screen.getByLabelText("Tracking code"), trackingCode);
+      await user.click(screen.getByRole("button", { name: "Show progress" }));
+      await screen.findByRole("heading", { name: "Received" });
+      return view;
+    };
+
+    let view = await lookup();
+    expect(screen.queryByText("Updated by the city administration")).not.toBeInTheDocument();
+    view.unmount();
+
+    await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" });
+    view = await lookup();
+    expect(screen.getByText("Updated by the city administration")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("Pipe burst"); // the reason stays internal
+    view.unmount();
+
+    await staffAction(admin, reportId, { type: "change_category", category: "electricity", reason: "Restored the category chosen by the reporter." });
+    await lookup();
+    expect(screen.queryByText("Updated by the city administration")).not.toBeInTheDocument(); // back to what the reporter chose
+  });
+
+  it("shows the corrected category on the public page", async () => {
+    localStorage.setItem("civicshield.mock.reports.v1", "[]");
+    const { reportId } = await newReport("electricity");
+    await staffAction(admin, reportId, { type: "start_review" });
+    await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" });
+    open("/issues");
+    const card = await screen.findByRole("article");
+    expect(within(card).getByText("Water supply")).toBeInTheDocument();
+    expect(within(card).queryByText("Electricity")).not.toBeInTheDocument();
+  });
+
+  it("moves a report to another organization and sends it back to Assigned", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await inProgress();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    expect(await screen.findByRole("heading", { name: "In progress" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reassign report" })).toBeDisabled(); // choose an organization first
+    await user.selectOptions(screen.getByLabelText("Move to another organization"), "water");
+    await user.click(screen.getByRole("button", { name: "Reassign report" }));
+    expect(await screen.findByRole("heading", { name: "Assigned" })).toBeInTheDocument();
+    expect(screen.getByText("Reassigned from Electric utility (sample) to Water utility (sample).")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for Water utility (sample) to start work.")).toBeInTheDocument();
+
+    const { listStaffReports } = await import("../api/client");
+    expect((await listStaffReports(water)).map((r) => r.id)).toContain(reportId);
+    expect((await listStaffReports(electric)).map((r) => r.id)).not.toContain(reportId);
+  });
+
+  it("warns when the organization no longer matches the category", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await inProgress();
+    await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" });
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    expect(await screen.findByText(/Electric utility \(sample\) handles Electricity, but this report is now in Water supply/)).toBeInTheDocument();
+  });
+
+  it("keeps these controls away from providers and closed reports", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await inProgress();
+    expect(await staffAction(electric, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" })).toBe("Your role cannot do this.");
+    expect(await staffAction(electric, reportId, { type: "reassign", orgId: "water" })).toBe("Your role cannot do this.");
+
+    open("/staff");
+    await signIn(user, "provider_electric", "provider12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    await screen.findByText("Next: finish and report");
+    expect(screen.queryByLabelText("Category")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Move to another organization")).not.toBeInTheDocument();
+  });
+
+  it("refuses invalid changes", async () => {
+    const { reportId } = await inProgress();
+    expect(await staffAction(admin, reportId, { type: "change_category", category: "electricity", reason: "Pipe burst, not electrical" })).toBe("The report already has this category.");
+    expect(await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "no" })).toBe("Give a short reason for the change (at least 5 characters).");
+    expect(await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "     " })).toBe("Give a short reason for the change (at least 5 characters).");
+    expect(await staffAction(admin, reportId, { type: "reassign", orgId: "electric" })).toBe("The report is already assigned to this organization.");
+    expect(await staffAction(admin, reportId, { type: "reassign", orgId: "nope" })).toBe("Choose an organization.");
+
+    const fresh = await newReport();
+    expect(await staffAction(admin, fresh.reportId, { type: "reassign", orgId: "water" })).toMatch(/not available at the report's current step/);
+
+    await staffAction(electric, reportId, { type: "submit_resolution", summary: "Replaced the broken light." });
+    await staffAction(admin, reportId, { type: "approve" });
+    expect(await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" })).toMatch(/not available at the report's current step/);
+  });
+});

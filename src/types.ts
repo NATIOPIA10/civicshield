@@ -29,6 +29,7 @@ export interface Report {
   id: string;
   trackingCode: string;
   category: CategoryId;
+  originalCategory?: CategoryId; // what the reporter chose, kept even if the administrator corrects it
   description: string;
   area: string;
   lat?: number;
@@ -68,6 +69,7 @@ export interface PublicReportView {
   isResolved: boolean;
   timeline: { label: string; at: string }[];
   resolution?: string;
+  categoryChanged?: boolean; // true when the administration corrected the category
   feedbackGiven: boolean;
 }
 
@@ -145,4 +147,6 @@ export type StaffAction =
   | { type: "approve" }
   | { type: "return"; reason: string }
   | { type: "note"; text: string }
+  | { type: "change_category"; category: CategoryId; reason: string }
+  | { type: "reassign"; orgId: string }
   | { type: "set_visibility"; hidePhoto: boolean; hideLocation: boolean; hideEvidence?: boolean };

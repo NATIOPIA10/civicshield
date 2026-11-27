@@ -85,7 +85,7 @@ export default function TrackReport() {
               </div>
               <h2 className="mt-2 text-3xl font-bold tracking-tight">{view.statusLabel}</h2>
               <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
-                {category && <span className="inline-flex items-center gap-1.5"><Icon name={CATEGORY_ICON[category.id]} className="h-4 w-4" />{category.label}</span>}
+                {category && <span className="inline-flex items-center gap-1.5"><Icon name={CATEGORY_ICON[category.id]} className="h-4 w-4" />{category.label}{view.categoryChanged && <span className="pill bg-info-soft text-info">Updated by the city administration</span>}</span>}
                 <span className="inline-flex items-center gap-1.5"><Icon name="pin" className="h-4 w-4" />{view.area}</span>
               </p>
 

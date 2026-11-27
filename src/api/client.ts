@@ -4,7 +4,7 @@
  * ready, replace the bodies of these functions with fetch() calls that follow
  * the API contract; no screen needs to change.
  */
-import { ORGS } from "../types";
+import { CATEGORIES, ORGS } from "../types";
 import type { CategoryId, NewReportInput, Organization, PublicIssue, PublicIssuesData, PublicReportView, Report, StaffAction, StaffSession, StaffUser, Status } from "../types";
 
 const KEY = "civicshield.mock.reports.v1";
@@ -88,6 +88,7 @@ function toPublic(r: Report): PublicReportView {
     isResolved: r.status === "closed",
     timeline,
     resolution: r.status === "closed" ? r.resolution?.summary : undefined,
+    categoryChanged: Boolean(r.originalCategory) && r.originalCategory !== r.category,
     feedbackGiven: Boolean(r.feedback),
   };
 }
@@ -105,6 +106,7 @@ export async function submitReport(input: NewReportInput): Promise<{ reportId: s
   const now = new Date().toISOString();
   const report: Report = {
     ...input,
+    originalCategory: input.category,
     id,
     trackingCode: makeTrackingCode(),
     status: "submitted",
@@ -190,6 +192,8 @@ const RULES: Record<StaffAction["type"], { role: "admin" | "provider" | "both"; 
   approve: { role: "admin", from: ["resolution_submitted"], to: "closed" },
   return: { role: "admin", from: ["resolution_submitted"], to: "returned" },
   set_visibility: { role: "admin", from: ["submitted", "under_review", "incomplete", "duplicate", "assigned", "in_progress", "resolution_submitted", "returned", "closed"] },
+  change_category: { role: "admin", from: ["submitted", "under_review", "assigned", "in_progress", "resolution_submitted", "returned"] },
+  reassign: { role: "admin", from: ["assigned", "in_progress", "returned"], to: "assigned" },
   note: { role: "both", from: ["submitted", "under_review", "incomplete", "duplicate", "assigned", "in_progress", "resolution_submitted", "returned", "closed"] },
 };
 
@@ -207,6 +211,16 @@ export async function staffAction(s: StaffSession, id: string, a: StaffAction): 
   if (a.type === "note") {
     if (!a.text.trim()) return "Write a note first.";
     r.notes.push({ by: s.name, text: a.text.trim(), at: now });
+  } else if (a.type === "change_category") {
+    const next = CATEGORIES.find((c) => c.id === a.category);
+    if (!next) return "Choose a category.";
+    if (a.category === r.category) return "The report already has this category.";
+    const why = a.reason.trim();
+    if (why.length < 5) return "Give a short reason for the change (at least 5 characters).";
+    const was = CATEGORIES.find((c) => c.id === r.category)?.label ?? r.category;
+    if (!r.originalCategory) r.originalCategory = r.category; // reports saved before this feature keep the earliest known choice
+    r.category = a.category;
+    r.notes.push({ by: s.name, text: `Category changed from ${was} to ${next.label}. Reason: ${why}${/[.!?]$/.test(why) ? "" : "."}`, at: now });
   } else if (a.type === "set_visibility") {
     r.hidePhoto = a.hidePhoto;
     r.hideLocation = a.hideLocation;
@@ -220,6 +234,15 @@ export async function staffAction(s: StaffSession, id: string, a: StaffAction): 
     if (a.type === "assign") {
       if (!a.orgId) return "Choose an organization.";
       r.orgId = a.orgId;
+    }
+    if (a.type === "reassign") {
+      const all = loadOrgs();
+      const target = all.find((o) => o.id === a.orgId);
+      if (!target) return "Choose an organization.";
+      if (target.id === r.orgId) return "The report is already assigned to this organization.";
+      const from = all.find((o) => o.id === r.orgId)?.name ?? "no organization";
+      r.orgId = target.id;
+      r.notes.push({ by: s.name, text: `Reassigned from ${from} to ${target.name}.`, at: now });
     }
     if (a.type === "submit_resolution") {
       if (a.summary.trim().length < 10) return "Describe the action taken (at least 10 characters).";
@@ -266,6 +289,7 @@ export async function devSeedDemoReports(): Promise<void> {
       id: `CS-${new Date().getFullYear()}-${String(reports.length + 1).padStart(4, "0")}`,
       trackingCode: makeTrackingCode(),
       category,
+      originalCategory: category,
       description: `Sample report ${i + 1}: a ${category} problem that needs attention.`,
       area: places[Math.floor(rnd() * places.length)],
       lat: 6.4089 + (rnd() - 0.5) * 0.05,
