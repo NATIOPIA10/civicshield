@@ -673,7 +673,7 @@ components:
         type:
           type: string
           enum: [start_review, mark_incomplete, mark_duplicate, assign, start_work, approve, return, note, set_visibility, change_category, reassign]
-        orgId: { type: string, description: 'Required when type is assign or reassign' }
+        orgId: { type: string, description: 'Required when type is assign or reassign. The organization must handle the report category, otherwise the API returns 400 with a message on orgId.' }
         category: { allOf: [{ $ref: '#/components/schemas/Category' }], description: 'Required when type is change_category' }
         reason: { type: string, description: 'Required when type is return, and when type is change_category (at least 5 characters, saved in the internal notes and never shown to the citizen)' }
         text: { type: string, description: 'Required when type is note' }

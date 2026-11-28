@@ -133,6 +133,10 @@ export async function submitFeedback(id: string, code: string, rating: number, c
   return true;
 }
 
+const categoryName = (id: CategoryId) => CATEGORIES.find((c) => c.id === id)?.label ?? id;
+const wrongCategory = (org: Organization, reportCategory: CategoryId) =>
+  `${org.name} handles ${categoryName(org.category)}, not ${categoryName(reportCategory)}. Choose an organization that handles this category.`;
+
 /** Development helper only: moves a report to its next step so the timeline can be demonstrated. */
 export async function devAdvanceReport(id: string, code: string): Promise<void> {
   const reports = load();
@@ -192,7 +196,7 @@ const RULES: Record<StaffAction["type"], { role: "admin" | "provider" | "both"; 
   approve: { role: "admin", from: ["resolution_submitted"], to: "closed" },
   return: { role: "admin", from: ["resolution_submitted"], to: "returned" },
   set_visibility: { role: "admin", from: ["submitted", "under_review", "incomplete", "duplicate", "assigned", "in_progress", "resolution_submitted", "returned", "closed"] },
-  change_category: { role: "admin", from: ["submitted", "under_review", "assigned", "in_progress", "resolution_submitted", "returned"] },
+  change_category: { role: "admin", from: ["submitted", "under_review", "assigned", "in_progress", "returned"] },
   reassign: { role: "admin", from: ["assigned", "in_progress", "returned"], to: "assigned" },
   note: { role: "both", from: ["submitted", "under_review", "incomplete", "duplicate", "assigned", "in_progress", "resolution_submitted", "returned", "closed"] },
 };
@@ -221,6 +225,14 @@ export async function staffAction(s: StaffSession, id: string, a: StaffAction): 
     if (!r.originalCategory) r.originalCategory = r.category; // reports saved before this feature keep the earliest known choice
     r.category = a.category;
     r.notes.push({ by: s.name, text: `Category changed from ${was} to ${next.label}. Reason: ${why}${/[.!?]$/.test(why) ? "" : "."}`, at: now });
+    // An assigned organization must always handle the report's category, so a mismatch takes the report back to review.
+    const org = r.orgId ? loadOrgs().find((o) => o.id === r.orgId) : undefined;
+    if (org && org.category !== a.category) {
+      r.orgId = undefined;
+      r.status = "under_review";
+      r.history.push({ status: "under_review", at: now });
+      r.notes.push({ by: s.name, text: `Taken back to review: ${org.name} does not handle ${next.label}. Assign an organization that handles it.`, at: now });
+    }
   } else if (a.type === "set_visibility") {
     r.hidePhoto = a.hidePhoto;
     r.hideLocation = a.hideLocation;
@@ -232,14 +244,17 @@ export async function staffAction(s: StaffSession, id: string, a: StaffAction): 
     });
   } else {
     if (a.type === "assign") {
-      if (!a.orgId) return "Choose an organization.";
-      r.orgId = a.orgId;
+      const target = loadOrgs().find((o) => o.id === a.orgId);
+      if (!target) return "Choose an organization.";
+      if (target.category !== r.category) return wrongCategory(target, r.category);
+      r.orgId = target.id;
     }
     if (a.type === "reassign") {
       const all = loadOrgs();
       const target = all.find((o) => o.id === a.orgId);
       if (!target) return "Choose an organization.";
       if (target.id === r.orgId) return "The report is already assigned to this organization.";
+      if (target.category !== r.category) return wrongCategory(target, r.category);
       const from = all.find((o) => o.id === r.orgId)?.name ?? "no organization";
       r.orgId = target.id;
       r.notes.push({ by: s.name, text: `Reassigned from ${from} to ${target.name}.`, at: now });
