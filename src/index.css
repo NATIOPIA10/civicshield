@@ -62,4 +62,24 @@ body {
       #0a3d33;
   }
   .hatch { background: repeating-linear-gradient(135deg, #bfd2c9 0 2px, transparent 2px 7px); }
+
+  /*
+   * Staff sidebar: the active item is a tab in the same colour as the page, so the sidebar and the page look joined.
+   * On wide screens the tab reaches the page and gets curved corners above and below (the two pseudo-elements
+   * paint a quarter-circle of page colour into the corner). On phones it is a plain rounded highlight.
+   */
+  .nav-tab {
+    position: relative;
+    background: var(--color-panel);
+    color: var(--color-ink);
+    border-radius: 0.75rem;
+    margin-right: 0.75rem;
+  }
+  @media (min-width: 48rem) {
+    .nav-tab { border-radius: 9999px 0 0 9999px; margin-right: 0; }
+    .nav-tab::before,
+    .nav-tab::after { content: ""; position: absolute; right: 0; width: 40px; height: 40px; pointer-events: none; }
+    .nav-tab::before { top: -40px; border-bottom-right-radius: 20px; box-shadow: 0 20px 0 0 var(--color-panel); }
+    .nav-tab::after { bottom: -40px; border-top-right-radius: 20px; box-shadow: 0 -20px 0 0 var(--color-panel); }
+  }
 }
