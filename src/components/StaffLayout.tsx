@@ -54,16 +54,14 @@ export default function StaffLayout() {
     navigate(q.trim() ? `/staff?q=${encodeURIComponent(q.trim())}` : "/staff");
   };
 
-  // Active item: a green bar on the left and bold text, as in the design reference.
+  // Inactive items sit on the green sidebar. The active item becomes a tab that joins the page (see .nav-tab in index.css).
   const item = (active: boolean) =>
-    `relative flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-left text-sm font-semibold transition-colors ${
-      active
-        ? "text-ink before:absolute before:left-0 before:top-1/2 before:h-7 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-civic"
-        : "text-muted hover:bg-paper hover:text-ink"
+    `relative flex items-center gap-3 py-3 pl-5 pr-10 text-left text-sm font-semibold transition-colors ${
+      active ? "nav-tab" : "mr-3 rounded-xl text-white/85 hover:bg-white/10 hover:text-white"
     }`;
 
   return (
-    <div className="min-h-screen bg-shell p-3 md:flex md:gap-3">
+    <div className="min-h-screen md:flex">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:font-semibold focus:shadow-lg">
         Skip to main content
       </a>
@@ -71,36 +69,36 @@ export default function StaffLayout() {
       {open && <button type="button" aria-label="Close menu" className="fixed inset-0 z-40 bg-ink/40 md:hidden" onClick={() => setOpen(false)} />}
 
       <aside
-        className={`w-64 shrink-0 flex-col rounded-2xl bg-white shadow-sm ${
-          open ? "fixed inset-y-3 left-3 z-50 flex shadow-xl md:sticky md:top-3 md:h-[calc(100vh-1.5rem)] md:shadow-sm" : "hidden md:sticky md:top-3 md:flex md:h-[calc(100vh-1.5rem)]"
+        className={`w-64 shrink-0 flex-col bg-civic-dark text-white ${
+          open ? "fixed inset-y-0 left-0 z-50 flex shadow-xl md:sticky md:top-0 md:h-screen md:shadow-none" : "hidden md:sticky md:top-0 md:flex md:h-screen"
         }`}
       >
-        <Link to="/staff" className="flex h-20 items-center gap-2.5 px-6" aria-label="CivicShield staff portal home">
-          <Logo />
+        <Link to="/staff" className="flex h-20 items-center gap-3 px-6" aria-label="CivicShield staff portal home">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-white"><Logo className="h-7 w-7" /></span>
           <span className="leading-tight">
             <span className="block text-lg font-bold tracking-tight">CivicShield</span>
-            <span className="block text-xs text-muted">Staff portal</span>
+            <span className="block text-xs text-white/70">Staff portal</span>
           </span>
         </Link>
 
-        <nav aria-label="Staff" className="flex-1 overflow-y-auto px-3 pb-3">
-          <p className="px-4 pb-2 pt-3 text-xs font-semibold tracking-wider text-muted">MENU</p>
-          <ul className="grid gap-1">
+        <nav aria-label="Staff" className="flex-1 overflow-y-auto pb-3 pl-3 pt-10">
+          <p className="px-5 pb-2 text-xs font-semibold tracking-wider text-white/60">MENU</p>
+          <ul className="grid gap-1.5">
             {ITEMS.filter((i) => admin || !i.adminOnly).map((i) => (
               <li key={i.to}>
                 <NavLink to={i.to} end={i.to === "/staff"} className={({ isActive }) => item(isActive || (i.to === "/staff" && pathname.startsWith("/staff/report/")))}>
                   <Icon name={i.icon} className="h-5 w-5" />
                   {i.label}
                   {i.to === "/staff" && attention.total > 0 && (
-                    <span aria-hidden className="ml-auto rounded-full bg-civic px-2 py-0.5 text-xs font-bold text-white">{attention.total}</span>
+                    <span aria-hidden className="ml-auto rounded-full bg-alert px-2 py-0.5 text-xs font-bold text-white">{attention.total}</span>
                   )}
                 </NavLink>
               </li>
             ))}
           </ul>
 
-          <p className="px-4 pb-2 pt-6 text-xs font-semibold tracking-wider text-muted">GENERAL</p>
-          <ul className="grid gap-1">
+          <p className="px-5 pb-2 pt-8 text-xs font-semibold tracking-wider text-white/60">GENERAL</p>
+          <ul className="grid gap-1.5">
             <li>
               <Link to="/" className={item(false)}>
                 <Icon name="globe" className="h-5 w-5" />
@@ -108,7 +106,7 @@ export default function StaffLayout() {
               </Link>
             </li>
             <li>
-              <button type="button" onClick={signOut} className={item(false)}>
+              <button type="button" onClick={signOut} className={`${item(false)} w-[calc(100%-0.75rem)]`}>
                 <Icon name="logout" className="h-5 w-5" />
                 Sign out
               </button>
@@ -116,15 +114,15 @@ export default function StaffLayout() {
           </ul>
         </nav>
 
-        <div className="m-3 rounded-2xl card-dark p-5 text-white">
+        <div className="m-4 rounded-2xl bg-white/10 p-5">
           <p className="font-semibold">Citizen view</p>
           <p className="mt-1 text-sm text-white/75">See how reviewed reports appear to the public, including hidden photos and locations.</p>
           <Link to="/issues" className="btn btn-sm mt-4 w-full bg-white text-civic-dark hover:bg-civic-soft">Public issues page</Link>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-        <header className="card sticky top-3 z-30 flex h-16 items-center gap-3 rounded-2xl px-3 sm:px-4">
+      <div className="flex min-w-0 flex-1 flex-col bg-panel">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 bg-panel/95 px-4 backdrop-blur sm:px-6 lg:px-8">
           <button type="button" className="btn btn-ghost btn-sm md:hidden" aria-expanded={open} aria-label="Open menu" onClick={() => setOpen(true)}>
             <Icon name="menu" className="h-6 w-6" />
           </button>
@@ -139,9 +137,9 @@ export default function StaffLayout() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search reports"
-              className="w-full rounded-full border border-line bg-paper py-2.5 pl-11 pr-12 text-sm focus:border-civic focus:bg-white"
+              className="w-full rounded-full border border-line bg-white py-2.5 pl-11 pr-12 text-sm shadow-sm focus:border-civic"
             />
-            <kbd aria-hidden className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-white px-2 py-0.5 text-xs text-muted sm:block">/</kbd>
+            <kbd aria-hidden className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-paper px-2 py-0.5 text-xs text-muted sm:block">/</kbd>
           </form>
 
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
@@ -152,7 +150,7 @@ export default function StaffLayout() {
                 aria-expanded={bellOpen}
                 aria-controls="attention-panel"
                 onClick={() => setBellOpen((o) => !o)}
-                className="relative grid h-11 w-11 place-items-center rounded-full border border-line bg-white text-ink hover:bg-civic-soft"
+                className="relative grid h-11 w-11 place-items-center rounded-full border border-line bg-white text-ink shadow-sm hover:bg-civic-soft"
               >
                 <Icon name="bell" className="h-5 w-5" />
                 {attention.total > 0 && <span aria-hidden className="absolute -right-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-alert px-1 text-xs font-bold text-white">{attention.total}</span>}
@@ -198,7 +196,7 @@ export default function StaffLayout() {
           </div>
         </header>
 
-        <main id="main" tabIndex={-1} className="flex-1 rounded-2xl bg-panel p-4 outline-none sm:p-6 lg:p-8">
+        <main id="main" tabIndex={-1} className="flex-1 p-4 outline-none sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

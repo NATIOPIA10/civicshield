@@ -953,3 +953,119 @@ describe("search and notifications", () => {
     expect(await screen.findByText("No reports here yet.")).toBeInTheDocument();
   });
 });
+
+describe("reports page like the dashboard", () => {
+  const admin = { role: "admin" as const, name: "Admin" };
+
+  async function twoReports() {
+    const water = await submitReport({ category: "water", description: "A pipe is leaking badly near the school.", area: "School road" });
+    const power = await submitReport({ category: "electricity", description: "The street light has been broken for a week.", area: "Market road" });
+    await staffAction(admin, power.reportId, { type: "start_review" });
+    await staffAction(admin, power.reportId, { type: "assign", orgId: "electric" });
+    return { water, power };
+  }
+
+  it("filters the list by category, shows the count, and clears the filter", async () => {
+    const user = userEvent.setup();
+    const { water, power } = await twoReports();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await screen.findByRole("link", { name: water.reportId });
+    expect(screen.getByText("3 reports · All reports")).toBeInTheDocument(); // plus the demo report
+
+    await user.selectOptions(screen.getByLabelText("Category"), "electricity");
+    expect(screen.getByRole("link", { name: power.reportId })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: water.reportId })).not.toBeInTheDocument();
+    expect(screen.getByText("1 report · All reports")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByRole("link", { name: water.reportId })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+  });
+
+  it("lets an administrator filter by organization, and combines it with the cards", async () => {
+    const user = userEvent.setup();
+    const { water, power } = await twoReports();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await screen.findByRole("link", { name: power.reportId });
+    await user.selectOptions(screen.getByLabelText("Organization"), "electric");
+    expect(screen.getByRole("link", { name: power.reportId })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: water.reportId })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^To review/ })); // the only electric report is already assigned
+    expect(screen.getByText("No reports here yet.")).toBeInTheDocument();
+    expect(screen.getByText("0 reports · To review")).toBeInTheDocument();
+  });
+
+  it("gives a provider a category filter but no organization filter", async () => {
+    const user = userEvent.setup();
+    open("/staff");
+    await signIn(user, "provider_water", "provider12345");
+    await screen.findByText("Reports assigned to you");
+    expect(screen.getByLabelText("Category")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Organization")).not.toBeInTheDocument();
+  });
+
+  it("shows each report's category and organization in its row, and highlights the chosen card", async () => {
+    const user = userEvent.setup();
+    const { power } = await twoReports();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    const row = (await screen.findByRole("link", { name: power.reportId })).closest("tr")!;
+    expect(within(row).getByText("Electricity")).toBeInTheDocument();
+    expect(within(row).getByText("Electric utility (sample)")).toBeInTheDocument();
+    expect(within(row).getByText("Assigned")).toBeInTheDocument();
+
+    const all = screen.getByRole("button", { name: /^All reports/ });
+    expect(all).toHaveAttribute("aria-pressed", "true");
+    expect(all.className).toContain("card-hero"); // the chosen card gets the green highlight
+    await user.click(screen.getByRole("button", { name: /^Ready to assign/ }));
+    expect(all).toHaveAttribute("aria-pressed", "false");
+    expect(all.className).not.toContain("card-hero");
+  });
+});
+
+describe("sidebar joined to the page", () => {
+  const admin = { role: "admin" as const, name: "Admin" };
+
+  it("marks the current page as the active tab, and moves it when you navigate", async () => {
+    const user = userEvent.setup();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    const sidebar = await screen.findByRole("navigation", { name: "Staff" });
+    const reports = within(sidebar).getByRole("link", { name: "Reports" });
+    const dashboard = within(sidebar).getByRole("link", { name: "Dashboard" });
+    expect(reports.className).toContain("nav-tab");
+    expect(reports).toHaveAttribute("aria-current", "page");
+    expect(dashboard.className).not.toContain("nav-tab");
+
+    await user.click(dashboard);
+    await screen.findByText("Automatic summary");
+    expect(within(sidebar).getByRole("link", { name: "Dashboard" }).className).toContain("nav-tab");
+    expect(within(sidebar).getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
+    expect(within(sidebar).getByRole("link", { name: "Reports" }).className).not.toContain("nav-tab");
+  });
+
+  it("keeps Reports as the active tab on a report's detail page", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport();
+    await staffAction(admin, reportId, { type: "start_review" });
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    await screen.findByRole("heading", { name: "Under review" });
+    const sidebar = screen.getByRole("navigation", { name: "Staff" });
+    expect(within(sidebar).getByRole("link", { name: "Reports" }).className).toContain("nav-tab");
+  });
+
+  it("highlights only one menu item at a time, and never the general links", async () => {
+    const user = userEvent.setup();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    const sidebar = await screen.findByRole("navigation", { name: "Staff" });
+    const tabs = within(sidebar).getAllByRole("link").filter((l) => l.className.includes("nav-tab"));
+    expect(tabs).toHaveLength(1);
+    expect(within(sidebar).getByRole("link", { name: "Public website" }).className).not.toContain("nav-tab");
+  });
+});
