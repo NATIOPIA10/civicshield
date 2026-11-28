@@ -30,9 +30,9 @@ All screens call functions in `src/api/client.ts`. Today they use a mock. To go 
 | `start_review` | admin | submitted | under_review |
 | `mark_incomplete` | admin | under_review | incomplete |
 | `mark_duplicate` | admin | under_review | duplicate |
-| `assign` (needs `orgId`) | admin | under_review | assigned |
-| `reassign` (needs `orgId`) | admin | assigned, in_progress, returned | assigned. Must be a different organization. Records a note |
-| `change_category` (needs `category` and `reason`) | admin | any step before closed | unchanged. Must be a different category, with a reason of at least 5 characters. Records a note |
+| `assign` (needs `orgId`) | admin | under_review | assigned. The organization must handle the report's category |
+| `reassign` (needs `orgId`) | admin | assigned, in_progress, returned | assigned. Must be a different organization that handles the report's category. Records a note |
+| `change_category` (needs `category` and `reason`) | admin | submitted, under_review, assigned, in_progress, returned (not while a resolution awaits review) | unchanged, unless the assigned organization does not handle the new category. Then the organization is removed, the status goes back to under_review, and a second note says so. Needs a different category and a reason of at least 5 characters |
 | `start_work` | provider | assigned | in_progress |
 | resolution endpoint | provider | in_progress, returned | resolution_submitted |
 | `approve` | admin | resolution_submitted | closed |
@@ -57,6 +57,7 @@ These cannot be left to the frontend. Write a test for each one.
 9. **Feedback.** Only on a closed report, once per report.
 10. **Secrets.** Keys and database credentials come from environment variables, never from the repository.
 11. **Public issues.** `GET /public/issues` lists only reviewed reports (not submitted, incomplete or duplicate ones) and uses its own allow-list serializer. It returns the citizen's photo and coordinates, and for solved issues the provider's repair photo, (shown as a "View location on map" link) but never tracking codes, internal notes, organizations or staff names. The report form tells citizens that photo and location become public after review.
+14. **Category and organization always agree.** An assigned organization must handle the report's category. `assign` and `reassign` reject a mismatch with 400 and a message on `orgId`, and `change_category` takes the report back to review when the current organization no longer fits.
 13. **Reporter's category.** Store `originalCategory` when the report is created and never overwrite it. Restoring it is an ordinary `change_category` back to that value. Citizens only see `categoryChanged`, never the reason.
 12. **Approved resolution.** The resolution text is public (on the tracking page and the public list) only after the administrator has approved and closed the report.
 

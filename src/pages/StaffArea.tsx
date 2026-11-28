@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getSession, listStaffReports } from "../api/client";
 import ReportMap from "../components/ReportMap";
 import { PageHeader, StatusPill } from "../components/ui";
@@ -29,7 +29,11 @@ export default function StaffReports() {
   usePageTitle("Reports");
   const [session] = useState(getSession);
   const [reports, setReports] = useState<Report[] | null>(null);
-  const [filterKey, setFilterKey] = useState("all");
+  const [params] = useSearchParams();
+  const q = (params.get("q") ?? "").trim();
+  const filterParam = params.get("filter");
+  const [filterKey, setFilterKey] = useState(filterParam ?? "all");
+  useEffect(() => { if (filterParam) setFilterKey(filterParam); }, [filterParam]);
   const [view, setView] = useState<"list" | "map">("list");
   const { orgName } = useOrganizations();
   useEffect(() => { if (session) listStaffReports(session).then(setReports); }, [session]);
@@ -39,7 +43,10 @@ export default function StaffReports() {
   const filters = admin ? ADMIN_FILTERS : PROVIDER_FILTERS;
   const active = filters.find((f) => f.key === filterKey) ?? filters[0];
   const countOf = (f: Filter) => (reports ?? []).filter((r) => !f.statuses || f.statuses.includes(r.status)).length;
-  const rows = (reports ?? []).filter((r) => !active.statuses || active.statuses.includes(r.status));
+  const matches = (r: Report) =>
+    !q ||
+    [r.id, r.area, r.description, CATEGORIES.find((c) => c.id === r.category)?.label ?? ""].some((v) => v.toLowerCase().includes(q.toLowerCase()));
+  const rows = (reports ?? []).filter((r) => (!active.statuses || active.statuses.includes(r.status)) && matches(r));
 
   return (
     <div>
@@ -70,6 +77,12 @@ export default function StaffReports() {
         })}
       </div>
 
+      {q && (
+        <p className="mt-4 text-sm text-muted" aria-live="polite">
+          Showing reports that match “{q}”. <Link to="/staff" className="link">Clear search</Link>
+        </p>
+      )}
+
       <div className="mt-6 inline-flex rounded-lg border border-line bg-white p-0.5" role="group" aria-label="Show reports as">
         {(["list", "map"] as const).map((v) => (
           <button key={v} aria-pressed={view === v} onClick={() => setView(v)} className={`rounded-md px-4 py-1.5 text-sm font-semibold ${view === v ? "bg-civic text-white" : "text-muted hover:text-ink"}`}>
@@ -87,7 +100,7 @@ export default function StaffReports() {
           </thead>
           <tbody>
             {reports === null && <tr><td colSpan={6} className="px-4 py-6 text-muted">Loading...</td></tr>}
-            {reports && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No reports here yet.</td></tr>}
+            {reports && rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">{q ? "No reports match your search." : "No reports here yet."}</td></tr>}
             {rows.map((r) => (
               <tr key={r.id} className="border-b border-line last:border-0 hover:bg-paper">
                 <td className="px-4 py-3 font-mono"><Link className="link" to={`/staff/report/${r.id}`}>{r.id}</Link></td>

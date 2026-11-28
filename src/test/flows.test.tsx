@@ -518,13 +518,18 @@ describe("layout and guidance", () => {
     open("/staff");
     await signIn(user, "admin", "admin12345");
     const sidebar = await screen.findByRole("navigation", { name: "Staff" });
-    for (const name of ["Reports", "Dashboard", "Organizations", "Staff accounts"]) {
+    for (const name of ["Reports", "Dashboard", "Organizations", "Staff accounts", "Public website"]) {
       expect(within(sidebar).getByRole("link", { name })).toBeInTheDocument();
     }
-    expect(screen.getByRole("link", { name: "Public website" })).toBeInTheDocument();
+    expect(within(sidebar).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.getByText("MENU")).toBeInTheDocument();
+    expect(screen.getByText("GENERAL")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Public issues page" })).toHaveAttribute("href", "/issues");
+
     const top = screen.getByRole("banner");
     expect(within(top).getByText("City administrator")).toBeInTheDocument();
-    expect(within(top).getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(within(top).getByRole("searchbox", { name: "Search reports" })).toBeInTheDocument();
+    expect(within(top).getByRole("button", { name: /^Notifications/ })).toBeInTheDocument();
   });
 
   it("gives a provider only the Reports item", async () => {
@@ -532,7 +537,10 @@ describe("layout and guidance", () => {
     open("/staff");
     await signIn(user, "provider_water", "provider12345");
     const sidebar = await screen.findByRole("navigation", { name: "Staff" });
-    expect(within(sidebar).getAllByRole("link").map((l) => l.textContent)).toEqual(["Reports"]);
+    expect(within(sidebar).getByRole("link", { name: "Reports" })).toBeInTheDocument();
+    for (const name of ["Dashboard", "Organizations", "Staff accounts"]) {
+      expect(within(sidebar).queryByRole("link", { name })).not.toBeInTheDocument();
+    }
     expect(within(screen.getByRole("banner")).getByText("Service provider")).toBeInTheDocument();
   });
 
@@ -602,7 +610,6 @@ describe("layout and guidance", () => {
 
 describe("category and reassignment", () => {
   const admin = { role: "admin" as const, name: "Admin" };
-  const water = { role: "provider" as const, orgId: "water", name: "Water" };
   const electric = { role: "provider" as const, orgId: "electric", name: "Electric" };
 
   const inProgress = async () => {
@@ -686,33 +693,95 @@ describe("category and reassignment", () => {
     expect(within(card).queryByText("Electricity")).not.toBeInTheDocument();
   });
 
-  it("moves a report to another organization and sends it back to Assigned", async () => {
+  it("moves a report to another organization that handles the same category and sends it back to Assigned", async () => {
     const user = userEvent.setup();
+    const { createOrganization } = await import("../api/client");
+    const second = await createOrganization("Electric Co-op (sample)", "electricity");
+    if (typeof second === "string") throw new Error(second);
+    const coop = { role: "provider" as const, orgId: second.id, name: "Co-op" };
     const { reportId } = await inProgress();
+
     open("/staff");
     await signIn(user, "admin", "admin12345");
     await user.click(await screen.findByRole("link", { name: reportId }));
     expect(await screen.findByRole("heading", { name: "In progress" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reassign report" })).toBeDisabled(); // choose an organization first
-    await user.selectOptions(screen.getByLabelText("Move to another organization"), "water");
+
+    // only organizations that handle Electricity are offered: not the water utility, and not the current organization
+    const choices = within(screen.getByLabelText("Move to another organization")).getAllByRole("option").map((o) => o.textContent);
+    expect(choices).toEqual(["Choose...", "Electric Co-op (sample)"]);
+
+    await user.selectOptions(screen.getByLabelText("Move to another organization"), second.id);
     await user.click(screen.getByRole("button", { name: "Reassign report" }));
     expect(await screen.findByRole("heading", { name: "Assigned" })).toBeInTheDocument();
-    expect(screen.getByText("Reassigned from Electric utility (sample) to Water utility (sample).")).toBeInTheDocument();
-    expect(screen.getByText("Waiting for Water utility (sample) to start work.")).toBeInTheDocument();
+    expect(screen.getByText("Reassigned from Electric utility (sample) to Electric Co-op (sample).")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for Electric Co-op (sample) to start work.")).toBeInTheDocument();
 
     const { listStaffReports } = await import("../api/client");
-    expect((await listStaffReports(water)).map((r) => r.id)).toContain(reportId);
+    expect((await listStaffReports(coop)).map((r) => r.id)).toContain(reportId);
     expect((await listStaffReports(electric)).map((r) => r.id)).not.toContain(reportId);
   });
 
-  it("warns when the organization no longer matches the category", async () => {
+  it("takes an assigned report back to review when the new category does not fit its organization", async () => {
     const user = userEvent.setup();
     const { reportId } = await inProgress();
-    await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" });
     open("/staff");
     await signIn(user, "admin", "admin12345");
     await user.click(await screen.findByRole("link", { name: reportId }));
-    expect(await screen.findByText(/Electric utility \(sample\) handles Electricity, but this report is now in Water supply/)).toBeInTheDocument();
+    await user.selectOptions(await screen.findByLabelText("Category"), "water");
+    expect(screen.getByText(/This report is assigned to Electric utility \(sample\), which does not handle Water supply\. Saving takes it back to review/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Why is the category changing?"), "Pipe burst, not electrical");
+    await user.click(screen.getByRole("button", { name: "Save category" }));
+
+    expect(await screen.findByRole("heading", { name: "Under review" })).toBeInTheDocument();
+    expect(screen.getByText("Taken back to review: Electric utility (sample) does not handle Water supply. Assign an organization that handles it.")).toBeInTheDocument();
+    expect(screen.getByText("Assigned to: Not assigned")).toBeInTheDocument();
+    // the old provider no longer has it, and the administrator can only pick a water organization
+    const { listStaffReports } = await import("../api/client");
+    expect((await listStaffReports(electric)).map((r) => r.id)).not.toContain(reportId);
+    const choices = within(screen.getByLabelText("Assign to organization")).getAllByRole("option").map((o) => o.textContent);
+    expect(choices).toEqual(["Choose...", "Water utility (sample)"]);
+  });
+
+  it("only offers organizations that handle the report's category when assigning", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport("electricity");
+    await staffAction(admin, reportId, { type: "start_review" });
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    const choices = within(await screen.findByLabelText("Assign to organization")).getAllByRole("option").map((o) => o.textContent);
+    expect(choices).toEqual(["Choose...", "Electric utility (sample)"]);
+    expect(screen.getByText(/Only organizations that handle Electricity are listed/)).toBeInTheDocument();
+  });
+
+  it("explains what to do when no organization handles the category yet", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport("electricity");
+    await staffAction(admin, reportId, { type: "start_review" });
+    localStorage.setItem("civicshield.mock.orgs.v1", JSON.stringify([{ id: "water", name: "Water utility (sample)", category: "water" }]));
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: reportId }));
+    expect(await screen.findByText(/No organization handles Electricity yet/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add one under Organizations" })).toHaveAttribute("href", "/staff/organizations");
+    expect(screen.getByRole("button", { name: "Assign report" })).toBeDisabled();
+  });
+
+  it("refuses an organization that does not handle the category, and category changes while a result awaits review", async () => {
+    const { reportId } = await newReport("electricity");
+    await staffAction(admin, reportId, { type: "start_review" });
+    expect(await staffAction(admin, reportId, { type: "assign", orgId: "water" })).toBe(
+      "Water utility (sample) handles Water supply, not Electricity. Choose an organization that handles this category."
+    );
+    expect(await staffAction(admin, reportId, { type: "assign", orgId: "electric" })).toMatchObject({ status: "assigned" });
+    expect(await staffAction(admin, reportId, { type: "reassign", orgId: "water" })).toBe(
+      "Water utility (sample) handles Water supply, not Electricity. Choose an organization that handles this category."
+    );
+
+    await staffAction(electric, reportId, { type: "start_work" });
+    await staffAction(electric, reportId, { type: "submit_resolution", summary: "Replaced the broken light." });
+    expect(await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" })).toMatch(/not available at the report's current step/);
   });
 
   it("keeps these controls away from providers and closed reports", async () => {
@@ -743,5 +812,144 @@ describe("category and reassignment", () => {
     await staffAction(electric, reportId, { type: "submit_resolution", summary: "Replaced the broken light." });
     await staffAction(admin, reportId, { type: "approve" });
     expect(await staffAction(admin, reportId, { type: "change_category", category: "water", reason: "Pipe burst, not electrical" })).toMatch(/not available at the report's current step/);
+  });
+});
+
+describe("admin dashboard design", () => {
+  const admin = { role: "admin" as const, name: "Admin" };
+
+  async function openDashboard(user: ReturnType<typeof userEvent.setup>) {
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await user.click(await screen.findByRole("link", { name: "Dashboard" }));
+    await screen.findByText("Automatic summary");
+  }
+
+  it("keeps every figure, chart and note, laid out as cards", async () => {
+    const user = userEvent.setup();
+    await devSeedDemoReports();
+    await openDashboard(user);
+
+    // the four headline cards, the first one highlighted, each with an arrow link
+    const tiles = within(document.querySelector("dl")!);
+    for (const label of ["Total reports", "Open reports", "Closed reports"]) expect(tiles.getByText(label)).toBeInTheDocument();
+    expect(tiles.getByText(/^Overdue \(open over 7 days\)$/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View reports: Closed reports" })).toHaveAttribute("href", "/staff?filter=closed");
+    expect(screen.getByRole("link", { name: "View reports: Total reports" })).toHaveAttribute("href", "/staff");
+
+    // every panel that existed before is still there, with its title
+    for (const title of [
+      "New reports per week (last 8 weeks)",
+      "Automatic summary",
+      "Reports by category",
+      "Workload by organization (open reports)",
+      "Resolution progress",
+      "Reports by status",
+      "Report locations",
+    ]) {
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    }
+    expect(screen.getByText(/Template-based summary built only from the figures on this page/)).toBeInTheDocument();
+
+    // the other three figures now sit in the dark card
+    expect(screen.getByText(/^Citizen satisfaction \(\d+ ratings\)$/)).toBeInTheDocument();
+    expect(screen.getByText("Average time to first review")).toBeInTheDocument();
+    expect(screen.getByText("Average time to resolution")).toBeInTheDocument();
+  });
+
+  it("draws the weekly bars with a readable text version, and the gauge with a summary", async () => {
+    const user = userEvent.setup();
+    await devSeedDemoReports();
+    await openDashboard(user);
+    const weeks = screen.getAllByText(/^Week ending /);
+    expect(weeks).toHaveLength(8);
+    expect(weeks[0].textContent).toMatch(/Week ending .+: \d+ new reports?/);
+    expect(screen.getByRole("img", { name: /^\d+% of reports closed$/ })).toBeInTheDocument();
+    expect(screen.getByText(/^Closed \(\d+\)$/)).toBeInTheDocument();
+    expect(screen.getByText(/^In progress \(\d+\)$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Pending \(\d+\)$/)).toBeInTheDocument();
+  });
+
+  it("lists every organization in the workload card, and every category", async () => {
+    const user = userEvent.setup();
+    await devSeedDemoReports();
+    await openDashboard(user);
+    const workload = screen.getByRole("heading", { name: "Workload by organization (open reports)" }).closest("section")!;
+    for (const name of ["Electric utility (sample)", "Water utility (sample)", "Telecom provider (sample)", "Roads and construction office (sample)"]) {
+      expect(within(workload).getByText(name)).toBeInTheDocument();
+    }
+    expect(within(workload).getByRole("link", { name: "Manage organizations" })).toHaveAttribute("href", "/staff/organizations");
+    const categories = screen.getByRole("heading", { name: "Reports by category" }).closest("section")!;
+    for (const name of ["Electricity", "Water supply", "Network and telecommunications", "Construction and public infrastructure"]) {
+      expect(within(categories).getByText(name)).toBeInTheDocument();
+    }
+  });
+
+  it("says when the gauge leaves out incomplete and duplicate reports", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport();
+    await staffAction(admin, reportId, { type: "start_review" });
+    await staffAction(admin, reportId, { type: "mark_duplicate" });
+    await openDashboard(user);
+    expect(screen.getByText(/Incomplete and duplicate reports \(1\) are not counted here/)).toBeInTheDocument();
+  });
+});
+
+describe("search and notifications", () => {
+  const admin = { role: "admin" as const, name: "Admin" };
+
+  it("searches reports from the top bar, and clears the search", async () => {
+    const user = userEvent.setup();
+    const first = await submitReport({ category: "water", description: "A pipe is leaking badly near the school.", area: "Market road" });
+    await submitReport({ category: "water", description: "A pipe is leaking badly near the church.", area: "Church street" });
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    await screen.findByRole("link", { name: first.reportId });
+    await user.type(screen.getByRole("searchbox", { name: "Search reports" }), "market{Enter}");
+    expect(await screen.findByText(/Showing reports that match/)).toHaveTextContent("market");
+    expect(screen.getByRole("link", { name: first.reportId })).toBeInTheDocument();
+    expect(screen.queryByText("Church street")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("searchbox", { name: "Search reports" }));
+    await user.type(screen.getByRole("searchbox", { name: "Search reports" }), "zzzz{Enter}");
+    expect(await screen.findByText("No reports match your search.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Clear search" }));
+    expect(await screen.findByRole("link", { name: first.reportId })).toBeInTheDocument();
+    expect(screen.queryByText(/Showing reports that match/)).not.toBeInTheDocument();
+  });
+
+  it("shows how many things need attention on the bell, and links to them", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport();
+    open("/staff");
+    await signIn(user, "admin", "admin12345");
+    const bell = await screen.findByRole("button", { name: "Notifications: 1 need your attention" });
+    await user.click(bell);
+    const panel = screen.getByRole("region", { name: "Needs your attention" });
+    await user.click(within(panel).getByRole("link", { name: /To review/ }));
+    expect(await screen.findByRole("link", { name: reportId })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^To review/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("link", { name: "CS-2026-0001" })).not.toBeInTheDocument();
+  });
+
+  it("tells a provider what needs them, and an administrator when nothing does", async () => {
+    const user = userEvent.setup();
+    const { reportId } = await newReport();
+    await staffAction(admin, reportId, { type: "start_review" });
+    await staffAction(admin, reportId, { type: "assign", orgId: "electric" });
+
+    open("/staff");
+    await signIn(user, "provider_electric", "provider12345");
+    await user.click(await screen.findByRole("button", { name: "Notifications: 1 need your attention" }));
+    expect(within(screen.getByRole("region", { name: "Needs your attention" })).getByRole("link", { name: /To start/ })).toHaveAttribute("href", "/staff?filter=start");
+  });
+
+  it("opens the report list on the card named in the link", async () => {
+    const user = userEvent.setup();
+    open("/staff?filter=closed");
+    await signIn(user, "admin", "admin12345");
+    expect(await screen.findByRole("button", { name: /^Closed/ })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText("No reports here yet.")).toBeInTheDocument();
   });
 });

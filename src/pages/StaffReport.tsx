@@ -85,14 +85,15 @@ export default function StaffReport() {
   const org = orgName(r.orgId) ?? "the service provider";
   const step = nextStep(r.status, admin, org);
   const categoryLabel = (id: CategoryId) => CATEGORIES.find((c) => c.id === id)?.label ?? id;
-  const canEditRouting = admin && ["submitted", "under_review", "assigned", "in_progress", "resolution_submitted", "returned"].includes(r.status);
+  const canEditRouting = admin && ["submitted", "under_review", "assigned", "in_progress", "returned"].includes(r.status);
   const canReassign = admin && ["assigned", "in_progress", "returned"].includes(r.status);
   const reportedAs = r.originalCategory && r.originalCategory !== r.category ? r.originalCategory : null;
   const currentOrg = orgs.find((o) => o.id === r.orgId);
   const mismatch = currentOrg && currentOrg.category !== r.category
-    ? `${currentOrg.name} handles ${categoryLabel(currentOrg.category)}, but this report is now in ${categoryLabel(r.category)}. Consider moving it.`
+    ? `${currentOrg.name} handles ${categoryLabel(currentOrg.category)}, but this report is in ${categoryLabel(r.category)}. Move it to an organization that handles ${categoryLabel(r.category)}.`
     : "";
-  const otherOrgs = orgs.filter((o) => o.id !== r.orgId).sort((a, b) => Number(b.category === r.category) - Number(a.category === r.category));
+  const otherOrgs = orgs.filter((o) => o.id !== r.orgId && o.category === r.category);
+  const willUnassign = Boolean(currentOrg && category !== r.category && currentOrg.category !== category);
   const matching = orgs.filter((o) => o.category === r.category);
 
   return (
@@ -183,12 +184,18 @@ export default function StaffReport() {
             <>
               <div>
                 <label htmlFor="org" className="text-sm font-medium">Assign to organization</label>
-                <select id="org" value={orgId} onChange={(e) => setOrgId(e.target.value)} className={box}>
+                <select id="org" value={orgId} onChange={(e) => setOrgId(e.target.value)} className={box} disabled={matching.length === 0}>
                   <option value="">Choose...</option>
                   {matching.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  {orgs.filter((o) => o.category !== r.category).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
-                <button className={`${solid} mt-2`} onClick={() => run({ type: "assign", orgId })}>Assign report</button>
+                {matching.length === 0 ? (
+                  <p className="mt-2 text-xs font-medium text-signal">
+                    No organization handles {categoryLabel(r.category)} yet. <Link to="/staff/organizations" className="link">Add one under Organizations</Link>.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted">Only organizations that handle {categoryLabel(r.category)} are listed. To use a different one, change the category first.</p>
+                )}
+                <button className={`${solid} mt-2`} disabled={matching.length === 0} onClick={() => run({ type: "assign", orgId })}>Assign report</button>
               </div>
               <div className="flex gap-2">
                 <button className={btn} onClick={() => run({ type: "mark_incomplete" })}>Mark incomplete</button>
@@ -252,6 +259,11 @@ export default function StaffReport() {
                   <label htmlFor="route-reason" className="mt-3 block text-sm font-medium">Why is the category changing?</label>
                   <input id="route-reason" value={categoryReason} onChange={(e) => setCategoryReason(e.target.value)} placeholder="For example: pipe burst, not an electrical fault" className={box} />
                   <p className="mt-1 text-xs text-muted">The reason is saved in the internal notes. The citizen is told only that the category was updated.</p>
+                  {willUnassign && (
+                    <p className="mt-2 rounded-lg bg-signal-soft p-3 text-xs font-medium text-signal">
+                      This report is assigned to {currentOrg?.name}, which does not handle {categoryLabel(category)}. Saving takes it back to review so you can assign an organization that does.
+                    </p>
+                  )}
                 </>
               )}
               <button className={`${btn} mt-2`} disabled={category === r.category} onClick={() => run({ type: "change_category", category, reason: categoryReason })}>Save category</button>
@@ -263,7 +275,11 @@ export default function StaffReport() {
                     <option value="">Choose...</option>
                     {otherOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                   </select>
-                  <p className="mt-1 text-xs text-muted">The report goes back to Assigned, and the new organization must start the work.</p>
+                  <p className="mt-1 text-xs text-muted">
+                    {otherOrgs.length === 0
+                      ? `No other organization handles ${categoryLabel(r.category)}. Add one under Organizations, or change the category.`
+                      : `Only organizations that handle ${categoryLabel(r.category)} are listed. The report goes back to Assigned, and the new organization must start the work.`}
+                  </p>
                   <button className={`${btn} mt-2`} disabled={!reorg} onClick={() => run({ type: "reassign", orgId: reorg })}>Reassign report</button>
                 </>
               )}
